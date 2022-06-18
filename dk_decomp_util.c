@@ -3,61 +3,71 @@
 #include <string.h>
 #include "dkcomp.h"
 
-int main (int argc, char *argv[]) {
-
-    if (argc != 5) {
-        puts("Usage: ./decomp FORMAT OUTPUT INPUT POSITION\n\n"
-             "Supported formats:\n"
-             "    bd - SNES DKC2/DKC3 Big Data\n"
-             "    sd - SNES      DKC3 Small Data\n"
-             "dkcchr - SNES DKC Tileset\n"
-             "dkcgbc -  GBC DKC Layout\n"
-             "dkl    -  GB  DKL/DKL2/DKL3 tilemaps"
-        );
-        return 1;
+static void check_size (const char *name) {
+    FILE *f = fopen(name, "rb");
+    size_t len;
+    if (f == NULL) {
+        fprintf(stderr, "Failed to open output file. (size check)\n");
+        return;
     }
+
+    if (fseek(f, 0, SEEK_END) == -1
+    || (len = ftell(f)) == -1u) {
+        fprintf(stderr, "Failed to seek output file. (size check)\n");
+        fclose(f);
+        return;
+    }
+    fclose(f);
+
+    printf("Output size is %zd bytes.\n", len);
+}
+
+int main (int argc, char *argv[]) {
 
     static const struct DK_ID {
         enum DK_FORMAT id;
-        char *abbrev;
+        char *name;
     } formats[] = {
-        {    BD_DECOMP, "bd" },
-        {    SD_DECOMP, "sd" },
-        {DKCCHR_DECOMP, "dkcchr" },
-        {DKCGBC_DECOMP, "dkcgbc" },
-        {   DKL_DECOMP, "dkl" }
+        {      BD_COMP, "SNES DKC2/DKC3 Big Data"       },
+        {      SD_COMP, "SNES DKC3 Small Data"          },
+        {  DKCCHR_COMP, "SNES DKC Tileset"              },
+        {  DKCGBC_COMP, " GBC DKC Tilemaps"             },
+        {     DKL_COMP, " GB  DKL/DKL2/DKL3 Tilemaps"   },
+        {RAREHUFF_COMP, " GBA DKC2/DKC3 Huffman"        },
+        { RAREPRO_COMP, " GBA DKC2/DKC3 Data Format #2" },
+        {GBA_HUFF_COMP, " GBA BIOS Huffman"             },
+        {GBA_LZ77_COMP, " GBA BIOS LZ77"                },
+        { GBA_RLE_COMP, " GBA BIOS RLE"                 },
+        {     GBA_COMP, " GBA BIOS Auto-Detect"         }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
-
     int i, format = 0;
-    for (i = 0; i < size; i++) {
-        const struct DK_ID *f = &formats[i];
-        if (!strcmp(argv[1], f->abbrev)) {
-            format = f->id;
-            break;
-        }
+    size_t offset;
+
+    if (argc != 5) {
+        puts("Usage: ./decomp FORMAT OUTPUT INPUT POSITION\n\n"
+             "Supported decompression formats:");
+        for (i = 0; i < size; i++)
+            printf("  %2d - %s\n", i, formats[i].name);
+        return 1;
     }
-    if (i == size) {
+
+    format = strtol(argv[1], NULL, 0);
+    if (format < 0 || format >= size) {
         fprintf(stderr, "Unsupported decompression format.\n");
         return 1;
     }
 
-    if (dk_decompress_file_to_file(format, argv[2], argv[3], strtol(argv[4], NULL, 0))) {
+    offset = strtol(argv[4], NULL, 0);
+
+    if (dk_decompress_file_to_file(formats[format].id, argv[2], argv[3], offset)) {
         fprintf(stderr, "Error: %s.\n", dk_get_error());
         return 1;
     }
 
-    FILE *f = fopen(argv[2], "rb");
-    if (fseek(f, 0, SEEK_END)) {
-        fprintf(stderr, "seek_error\n");
-        fclose(f);
-        return 1;
-    }
-    size_t len = ftell(f);
-
-    printf("Output size is %zd bytes.\n", len);
-
+    check_size(argv[2]);
     printf("Done.\n");
 
     return 0;
 }
+

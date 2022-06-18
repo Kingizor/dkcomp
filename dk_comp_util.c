@@ -1,47 +1,67 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "dkcomp.h"
 
-int main (int argc, char *argv[]) {
-
-    if (argc != 4) {
-        puts("Usage: ./comp FORMAT OUTPUT INPUT\n\n"
-             "Supported formats:\n"
-             "bd - SNES DKC2/DKC3 Big Data\n"
-             "sd - SNES      DKC3 Small Data"
-        );
-        return 1;
+static void check_size (const char *name) {
+    FILE *f = fopen(name, "rb");
+    size_t len;
+    if (f == NULL) {
+        fprintf(stderr, "Failed to open output file. (size check)\n");
+        return;
     }
+
+    if (fseek(f, 0, SEEK_END) == -1
+    || (len = ftell(f)) == -1u) {
+        fprintf(stderr, "Failed to seek output file. (size check)\n");
+        fclose(f);
+        return;
+    }
+    fclose(f);
+
+    printf("Output size is %zd bytes.\n", len);
+}
+
+int main (int argc, char *argv[]) {
 
     static const struct DK_ID {
         enum DK_FORMAT id;
-        char *abbrev;
+        char *name;
     } formats[] = {
-        {    BD_COMP, "bd" },
-        {    SD_COMP, "sd" }
+        {       BD_COMP, "SNES DKC2/DKC3 Big Data" },
+        {       SD_COMP, "SNES DKC3 Small Data"    },
+        {   DKCCHR_COMP, "SNES DKC Tile Data"      },
+        {   DKCGBC_COMP, " GBC DKC Layout"         },
+        { RAREHUFF_COMP, " GBA DKC2/DKC3 Huffman"  },
+        { GBA_HUFF_COMP, " GBA BIOS Huffman"       },
+        { GBA_LZ77_COMP, " GBA BIOS LZ77"          },
+        {  GBA_RLE_COMP, " GBA BIOS RLE"           }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
-
     int i, format = 0;
-    for (i = 0; i < size; i++) {
-        const struct DK_ID *f = &formats[i];
-        if (!strcmp(argv[1], f->abbrev)) {
-            format = f->id;
-            break;
-        }
+
+    if (argc != 4) {
+        puts("Usage: ./comp FORMAT OUTPUT INPUT\n\n"
+             "Supported compression formats:");
+        for (i = 0; i < size; i++)
+            printf("  %2d - %s\n", i, formats[i].name);
+        return 1;
     }
-    if (i == size) {
+
+    format = strtol(argv[1], NULL, 0);
+    if (format < 0 || format >= size) {
         fprintf(stderr, "Unsupported compression format.\n");
         return 1;
     }
 
-    if (dk_compress_file_to_file(format, argv[2], argv[3])) {
+    if (dk_compress_file_to_file(formats[format].id, argv[2], argv[3])) {
         fprintf(stderr, "Error: %s.\n", dk_get_error());
         return 1;
     }
-    if (dk_get_error() != NULL)
-        printf("Error says: %s.\n", dk_get_error());
+
+    check_size(argv[2]);
     printf("Done.\n");
 
     return 0;
 }
+
