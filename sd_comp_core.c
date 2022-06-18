@@ -13,18 +13,18 @@ static int write_bits (struct COMPRESSOR *sd, int count, unsigned val) {
     while (count--) {
 
         /* OR the bit into the output */
-        sd->output[sd->outpos] |= ((val >> count) & 1)
-                               << (sd->bitpos ^ 7);
+        sd->out.data[sd->out.pos] |= ((val >> count) & 1)
+                               << (sd->out.bitpos ^ 7);
 
         /* Increment the bit position */
-        sd->bitpos = (sd->bitpos + 1) & 7;
+        sd->out.bitpos = (sd->out.bitpos + 1) & 7;
 
         /* increment position if we've pushed a full byte */
-        if (!sd->bitpos)
-            sd->outpos++;
+        if (!sd->out.bitpos)
+            sd->out.pos++;
 
         /* don't go past the end of the buffer */
-        if (sd->outpos >= OUTPUT_LIMIT) {
+        if (sd->out.pos >= sd->out.limit) {
             dk_set_error("Attempted to write past end of buffer.");
             return 1;
         }
@@ -35,9 +35,9 @@ static int write_bits (struct COMPRESSOR *sd, int count, unsigned val) {
 
 /* check if the corresponding bits are present */
 static int bits_active (struct COMPRESSOR *sd, unsigned char bit) {
-    int i;
-    for (i = 1; i < sd->input_len; i+=2)
-        if (sd->input[i] & bit)
+    size_t i;
+    for (i = 1; i < sd->in.length; i+=2)
+        if (sd->in.data[i] & bit)
             return 1;
     return 0;
 }
@@ -47,9 +47,9 @@ static int bits_active (struct COMPRESSOR *sd, unsigned char bit) {
 static int encode_subs (
     struct COMPRESSOR *sd,
     unsigned char bit_val, /* which bits to process */
-    int loop_limit
+    size_t loop_limit
 ) {
-    int i;
+    size_t i;
     int count; /* How many bits?            (6 or 4) */
     int shift; /* How many trailing zeroes? (1 or 3) */
     {
@@ -58,14 +58,14 @@ static int encode_subs (
         for (b = bit_val, count = 0;        b; count++, b &= b - 1);
     }
 
-    for (i = 1; i < sd->input_len;) {
-        unsigned char word = sd->input[i] & bit_val; /* high byte only */
-        int j; /* how many future words have the same bits set */
+    for (i = 1; i < sd->in.length;) {
+        unsigned char word = sd->in.data[i] & bit_val; /* high byte only */
+        size_t j; /* how many future words have the same bits set */
         unsigned val;
 
         /* check the consistency over the next n words */
-        for (j = 2; j < loop_limit*2 && j < (sd->input_len - i); j+=2)
-            if ((sd->input[i+j] & bit_val) ^ word)
+        for (j = 2; j < loop_limit*2 && j < (sd->in.length - i); j+=2)
+            if ((sd->in.data[i+j] & bit_val) ^ word)
                 break;
 
         i += j;
@@ -95,17 +95,17 @@ static int encode_subs (
 }
 
 static int rw (struct COMPRESSOR *sd, int addr) {
-    if ((sd->inpos+addr+2) > sd->input_len) {
+    if ((sd->in.pos+addr+2) > sd->in.length) {
         dk_set_error("Attempted to read past end of input file");
         return -1;
     }
-    return (sd->input[addr+1] << 8) | sd->input[addr+0];
+    return (sd->in.data[addr+1] << 8) | sd->in.data[addr+0];
 }
 
 static int encode_main (struct COMPRESSOR *sd) {
 
-    int i;
-    for (i = 0; i < sd->input_len;) {
+    size_t i;
+    for (i = 0; i < sd->in.length;) {
 
         enum { UNIQUE, SAME, INC, DEC } mode = UNIQUE;
         int LC;
@@ -116,9 +116,9 @@ static int encode_main (struct COMPRESSOR *sd) {
             return 1;
         unsigned short w1 = w & 0x3FF;
 
-        if (i < sd->input_len-2) {
+        if (i < sd->in.length-2) {
 
-            int addr = i + 2;
+            size_t addr = i + 2;
             int lim;
 
             /* Read next word */
@@ -139,7 +139,7 @@ static int encode_main (struct COMPRESSOR *sd) {
             for (LC = 2; LC < lim; LC++) {
                 unsigned short w3;
                 addr += 2;
-                if (addr >= sd->input_len)
+                if (addr >= sd->in.length)
                     break;
                 if ((w = rw(sd, i)) == -1)
                     return 1;
@@ -179,14 +179,14 @@ int sd_compress (struct COMPRESSOR *sd) {
     int i;
 
     /* output size (i.e. word count) */
-    sd->output[2] = sd->input_len >> 9;
-    sd->output[1] = sd->input_len >> 1;
-    sd->outpos = 3;
+    sd->out.data[2] = sd->in.length >> 9;
+    sd->out.data[1] = sd->in.length >> 1;
+    sd->out.pos = 3;
 
     /* the first three subroutines are optional (2000,4000,8000) */
     for (i = 0; i < 3; i++) {
         if (bits_active(sd, 0x20 << i)) {
-            sd->output[0] |= 1 << i;
+            sd->out.data[0] |= 1 << i;
             if (encode_subs(sd, 0x20 << i, 63))
                 return 1;
         }
@@ -199,8 +199,8 @@ int sd_compress (struct COMPRESSOR *sd) {
     if (encode_main(sd))
         return 1;
 
-    if (sd->bitpos)
-        sd->outpos++;
+    if (sd->out.bitpos)
+        sd->out.pos++;
     return 0;
 }
 

@@ -8,36 +8,36 @@
 #include "dk_internal.h"
 
 static int write_out (struct COMPRESSOR *dc, unsigned char val) {
-    if (dc->outpos > 0xFFFF) {
+    if (dc->out.pos > 0xFFFF) {
         dk_set_error("Attempted to write out of bounds.");
         return -1;
     }
-    dc->output[dc->outpos++] = val;
+    dc->out.data[dc->out.pos++] = val;
     return 0;
 }
 static int read_out (struct COMPRESSOR *dc, unsigned short v) {
 
-    int addr = dc->outpos - v;
+    int addr = dc->out.pos - v;
 
     if (addr < 0 || addr > 0xFFFF) {
         dk_set_error("Attempted to read out of bounds.");
         return -1;
     }
 
-    return dc->output[addr];
+    return dc->out.data[addr];
 }
 
 static unsigned char rn (struct COMPRESSOR *dc) { /* read nibble */
-    if (dc->inpos >= dc->input_len) {
+    if (dc->in.pos >= dc->in.length) {
         dk_set_error("Attempted to read past end of input.");
         return -1;
     }
 
-    dc->half ^= 1;
+    dc->in.bitpos ^= 4;
 
-    if (dc->half) {
-        return dc->input[dc->inpos  ] >> 4; /* hi 1st */
-    }   return dc->input[dc->inpos++] & 15; /* lo 2nd */
+    if (dc->in.bitpos) {
+        return dc->in.data[dc->in.pos  ] >> 4; /* hi 1st */
+    }   return dc->in.data[dc->in.pos++] & 15; /* lo 2nd */
 }
 static int rb (struct COMPRESSOR *dc) { /* read byte */
     int hi,lo;
@@ -96,23 +96,23 @@ static int decode_case (struct COMPRESSOR *dc) {
         case  4: case  5: {
             int i = rn(dc) + 3;
             while (i--)
-                if (write_out(dc, dc->input[1 + (c & 1)]))
+                if (write_out(dc, dc->in.data[1 + (c & 1)]))
                     return 2;
             break;
         }
 
         /* Write a word constant */
         case 6: {
-            if (write_out(dc, dc->input[5]))
+            if (write_out(dc, dc->in.data[5]))
                 return 2;
-            if (write_out(dc, dc->input[6]))
+            if (write_out(dc, dc->in.data[6]))
                 return 2;
             break;
         }
 
         /* Write a byte constant */
         case 7: case 8: {
-            if (write_out(dc, dc->input[3 + ((c ^ 1) & 1)]))
+            if (write_out(dc, dc->in.data[3 + ((c ^ 1) & 1)]))
                 return 2;
             break;
         }
@@ -179,9 +179,9 @@ static int decode_case (struct COMPRESSOR *dc) {
         /* Word LUT */
         case 15: {
             int addr = (rn(dc) << 1) + 7;
-            if (write_out(dc, dc->input[addr++]))
+            if (write_out(dc, dc->in.data[addr++]))
                 return 2;
-            if (write_out(dc, dc->input[addr  ]))
+            if (write_out(dc, dc->in.data[addr  ]))
                 return 2;
             break;
         }
@@ -191,8 +191,8 @@ static int decode_case (struct COMPRESSOR *dc) {
 
 int bd_decompress (struct COMPRESSOR *dc) {
 
-    dc->outpos = 0;
-    dc->inpos  = 0x27;
+    dc->out.pos = 0;
+    dc->in.pos  = 0x27;
 
     for (;;) {
         switch (decode_case(dc)) {

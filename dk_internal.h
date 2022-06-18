@@ -5,25 +5,40 @@
 #ifndef DK_INTERNAL
 #define DK_INTERNAL
 
-struct COMPRESSOR {
-    unsigned char *input;
-    unsigned char *output;
-    int input_len;
-    int inpos;  /* Output offset */
-    int outpos; /* Input  offset */
-    int half;   /* nibble position */
-    int bitpos; /* bit position */
+struct FILE_STREAM {
+    unsigned char *data;
+    size_t length;
+    size_t limit;
+    size_t pos;
+    unsigned char bytepos; /* which byte in a word */
+    unsigned char bitpos;  /* which bit  in a byte */
 };
 
-#define OUTPUT_LIMIT 0x10000
+struct COMPRESSOR {
+    struct FILE_STREAM in;
+    struct FILE_STREAM out;
+};
 
-int       bd_compress (struct COMPRESSOR*);
-int     bd_decompress (struct COMPRESSOR*);
-int       sd_compress (struct COMPRESSOR*);
-int     sd_decompress (struct COMPRESSOR*);
-int dkcchr_decompress (struct COMPRESSOR*);
-int dkcgbc_decompress (struct COMPRESSOR*);
-int    dkl_decompress (struct COMPRESSOR*);
+int        bd_compress (struct COMPRESSOR*);
+int      bd_decompress (struct COMPRESSOR*);
+int        sd_compress (struct COMPRESSOR*);
+int      sd_decompress (struct COMPRESSOR*);
+int  dkcchr_decompress (struct COMPRESSOR*);
+int    dkcchr_compress (struct COMPRESSOR*);
+int    dkcgbc_compress (struct COMPRESSOR*);
+int  dkcgbc_decompress (struct COMPRESSOR*);
+int     dkl_decompress (struct COMPRESSOR*);
+int rarehuf_decompress (struct COMPRESSOR*);
+int   rarehuf_compress (struct COMPRESSOR*);
+int rarepro_decompress (struct COMPRESSOR*);
+int   rarepro_compress (struct COMPRESSOR*);
+int gbahuff_decompress (struct COMPRESSOR*);
+int   gbahuff_compress (struct COMPRESSOR*);
+int gbalz77_decompress (struct COMPRESSOR*);
+int   gbalz77_compress (struct COMPRESSOR*);
+int  gbarle_decompress (struct COMPRESSOR*);
+int    gbarle_compress (struct COMPRESSOR*);
+int     gba_decompress (struct COMPRESSOR*);
 
 void dk_set_error (const char*);
 

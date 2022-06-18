@@ -6,14 +6,14 @@
 #include <stdlib.h>
 #include "dk_internal.h"
 
-static int rb (struct COMPRESSOR *sd, int addr) {
-    if (addr >= sd->input_len) {
+static int rb (struct COMPRESSOR *sd, size_t addr) {
+    if (addr >= sd->in.length) {
         dk_set_error("Tried to read out of bounds.");
         return -1;
     }
-    return sd->input[addr];
+    return sd->in.data[addr];
 }
-static int rw (struct COMPRESSOR *sd, int addr) {
+static int rw (struct COMPRESSOR *sd, size_t addr) {
     int r0, r1;
     if ((r0 = rb(sd, addr))   < 0
     ||  (r1 = rb(sd, addr+1)) < 0)
@@ -25,14 +25,15 @@ static int rw (struct COMPRESSOR *sd, int addr) {
 static int bits (struct COMPRESSOR *sd, int count) {
     unsigned val = 0;
     while (count--) {
-        int v = rb(sd, sd->inpos);
+        unsigned char bit;
+        int v = rb(sd, sd->in.pos);
         if (v < 0)
             return -1;
-        unsigned char bit = !!(v & (1 << (sd->bitpos ^ 7)));
+        bit = !!(v & (1 << (sd->in.bitpos ^ 7)));
         val |= bit << count;
-        if (++sd->bitpos == 8) {
-            sd->inpos++;
-            sd->bitpos = 0;
+        if (++sd->in.bitpos == 8) {
+            sd->in.pos++;
+            sd->in.bitpos = 0;
         }
     }
     return val;
@@ -41,12 +42,12 @@ static int bits (struct COMPRESSOR *sd, int count) {
 /* modify word (all writes are rmw) */
 static int mw (struct COMPRESSOR *sd, size_t addr, int val) {
     addr <<= 1;
-    if (addr+1 >= OUTPUT_LIMIT) {
+    if (addr+1 >= sd->out.limit) {
         dk_set_error("Attempted to write out of bounds.");
         return -1;
     }
-    sd->output[addr  ] |= val;
-    sd->output[addr+1] |= val >> 8;
+    sd->out.data[addr  ] |= val;
+    sd->out.data[addr+1] |= val >> 8;
     return 0;
 }
 
@@ -142,16 +143,16 @@ int sd_decompress (struct COMPRESSOR *sd) {
     int i, subs;
 
     /* first byte indicates which subs to call */
-    if ((subs = rb(sd, sd->inpos + 0)) < 0)
+    if ((subs = rb(sd, sd->in.pos + 0)) < 0)
         return 1;
     subs &= 7;
 
     /* next word is the output size in words */
-    if ((i = rw(sd, sd->inpos + 1)) < 0)
+    if ((i = rw(sd, sd->in.pos + 1)) < 0)
         return 1;
-    sd->outpos  = i << 1;
+    sd->out.pos  = i << 1;
 
-    sd->inpos  += 3;
+    sd->in.pos  += 3;
 
     /* first three subs are optional */
     for (i = 0; i < 3; i++)

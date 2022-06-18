@@ -4,19 +4,18 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <setjmp.h>
 #include "dk_internal.h"
 
 /* Read a nibble from input */
 static int rn (struct COMPRESSOR *dk) {
-    if (dk->inpos >= dk->input_len) {
+    if (dk->in.pos >= dk->in.length) {
         dk_set_error("Tried to read out of bounds. (input)");
         return -1;
     }
-    unsigned char z = (dk->input[dk->inpos] >> (4*dk->half)) & 15;
-    if (!dk->half)
-        dk->inpos++;
-    dk->half = !dk->half;
+    unsigned char z = (dk->in.data[dk->in.pos] >> dk->in.bitpos) & 15;
+    if (!dk->in.bitpos)
+        dk->in.pos++;
+    dk->in.bitpos ^= 4;
     return z;
 }
 
@@ -29,21 +28,21 @@ static int rb (struct COMPRESSOR *dk) {
 }
 
 /* Read a byte from output */
-static int rbo (struct COMPRESSOR *dk, int addr) {
-    if (addr < 0 || addr >= dk->outpos) {
+static int rbo (struct COMPRESSOR *dk, size_t addr) {
+    if (addr >= dk->out.pos) {
         dk_set_error("Tried to read out of bounds. (output)");
         return -1;
     }
-    return dk->output[addr];
+    return dk->out.data[addr];
 }
 
 /* Write a byte to output */
 static int wb (struct COMPRESSOR *dk, unsigned char val) {
-    if (dk->outpos >= OUTPUT_LIMIT) {
+    if (dk->out.pos >= dk->out.limit) {
         dk_set_error("Tried to write out of bounds.");
         return -1;
     }
-    dk->output[dk->outpos++] = val;
+    dk->out.data[dk->out.pos++] = val;
     return 0;
 }
 
@@ -53,22 +52,22 @@ static int wb (struct COMPRESSOR *dk, unsigned char val) {
 
 static int a52 (struct COMPRESSOR *dk, int a, int n) {
 
-    dk->output[dk->outpos] = n;
+    dk->out.data[dk->out.pos] = n;
     n = a;
     while (n--) {
         int t;
         RN(t);
-        a = t | dk->output[dk->outpos];
+        a = t | dk->out.data[dk->out.pos];
         WB(a);
         a &= 0xF0;
-        dk->output[dk->outpos] = a;
+        dk->out.data[dk->out.pos] = a;
     }
     return 0;
 }
 
 int dkl_decompress (struct COMPRESSOR *dk) {
 
-    dk->half = 1;
+    dk->in.bitpos = 4;
 
     for (;;) {
         int a,n;
@@ -109,7 +108,7 @@ int dkl_decompress (struct COMPRESSOR *dk) {
 
                 n = a + 4;
                 while (n--) {
-                    int z = rbo(dk, dk->outpos - outpos - 1);
+                    int z = rbo(dk, dk->out.pos - outpos - 1);
                     if (z < 0)
                         return 1;
                     WB(z);
