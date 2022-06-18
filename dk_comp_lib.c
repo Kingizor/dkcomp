@@ -10,6 +10,11 @@
 #include "dk_internal.h"
 
 
+/* verify compressed data by decompressing and comparing */
+/* some formats pad input data which can make this fail */
+#define VERIFY_DATA 0
+
+
 /* Error reporting functions */
 static const char *dk_error_msg = "";
 
@@ -23,45 +28,22 @@ void dk_set_error (const char *error) {
 
 
 /* File/Buffer handling */
-static int check_size_comp (size_t input_size) {
-    if (input_size > 0x10000) {
-        dk_set_error("Input is too large to fit in a 16-bit bank. (n > 65536)");
-        return 1;
-    }
-    if (input_size < 128) {
-        dk_set_error("Input is too small. (n < 128)");
-        return 1;
-    }
-    return 0;
-}
-static int check_size_decomp (size_t input_size) {
-    if (input_size > 16777216) {
-        dk_set_error("Input file is too large.");
-        return 1;
-    }
-    if (input_size < 0x28) {
-        dk_set_error("Input is too small. (n < 0x28)");
-        return 1;
-    }
-    return 0;
-}
-static int check_input_mem (unsigned char *input, size_t input_size, int mode_comp) {
+
+static int check_input_mem (unsigned char *input) {
     if (input == NULL) {
         dk_set_error("Input pointer is NULL.");
         return 1;
     }
-    if (mode_comp) {
-        if (check_size_comp(input_size))
-            return 1;
-    }
-    else {
-        if (check_size_decomp(input_size))
-            return 1;
-    }
     return 0;
 }
 
-static int open_input_file (const char *fn, unsigned char **input, int *input_size, int ofs, int mode_comp) {
+static int open_input_file (
+    const char *fn,
+    unsigned char **input,
+    size_t *input_size,
+    int ofs,
+    int mode_comp
+) {
     FILE *f;
     long input_length;
 
@@ -84,13 +66,9 @@ static int open_input_file (const char *fn, unsigned char **input, int *input_si
     }
 
     if (mode_comp) {
-        if (check_size_comp(input_length))
-            goto error;
         *input_size = input_length;
     }
     else {
-        if (check_size_decomp(input_length))
-            goto error;
         if (ofs > input_length) {
             dk_set_error("Supplied decompression offset is larger than the input size.");
             goto error;
@@ -155,21 +133,74 @@ static int open_output_buffer (unsigned char **output, size_t output_size) {
 }
 
 
+#if VERIFY_DATA
+/* verify compressed data by decompressing it and comparing */
+static int verify_data (enum DK_FORMAT comp_type, struct COMPRESSOR *cmp) {
+    unsigned char *data = NULL;
+    size_t size = 0;
+    if (dk_decompress_mem_to_mem(comp_type, &data, &size, cmp->out.data, cmp->out.pos)) {
+        dk_set_error("Failed to decompress compressed data (corruption)");
+        goto error;
+    }
+    if (size != cmp->in.length) {
+        dk_set_error("Decompressed size doesn't match the original data");
+        goto error;
+    }
+    if (memcmp(data, cmp->in.data, size)) {
+        dk_set_error("Decompressed data doesn't match the original data");
+        goto error;
+    }
+    free(data);
+    return 0;
+error:
+    free(data);
+    return 1;
+}
+#endif
+
+
 
 
 
 
 /* Check whether a compressor is supported */
 
-int (*get_compressor(enum DK_FORMAT comp_type))(struct COMPRESSOR*) {
-    switch (comp_type) {
-        case     BD_COMP: { return bd_compress; }
-        case     SD_COMP: { return sd_compress; }
-        default: { break; }
+struct COMP_TYPE {
+    unsigned size_limit; /* 1 << n */
+    int (  *comp)(struct COMPRESSOR*);
+    int (*decomp)(struct COMPRESSOR*);
+};
+
+static const struct COMP_TYPE comp_table[] = {
+    [      BD_COMP] = { 16,      bd_compress,      bd_decompress },
+    [      SD_COMP] = { 16,      sd_compress,      sd_decompress },
+    [  DKCCHR_COMP] = { 16,  dkcchr_compress,  dkcchr_decompress },
+    [  DKCGBC_COMP] = { 12,  dkcgbc_compress,  dkcgbc_decompress },
+    [     DKL_COMP] = { 16,             NULL,     dkl_decompress },
+    [RAREHUFF_COMP] = { 24, rarehuf_compress, rarehuf_decompress },
+    [ RAREPRO_COMP] = { 24, rarepro_compress, rarepro_decompress },
+    [GBA_HUFF_COMP] = { 24, gbahuff_compress, gbahuff_decompress },
+    [GBA_LZ77_COMP] = { 24, gbalz77_compress, gbalz77_decompress },
+    [ GBA_RLE_COMP] = { 24,  gbarle_compress,  gbarle_decompress },
+    [     GBA_COMP] = { 24,             NULL,     gba_decompress }
+};
+
+
+/* Check whether a (de)compressor is supported */
+const struct COMP_TYPE *get_compressor (int index, int type) {
+    if (index < 0
+    ||  index >= COMP_LIMIT
+    ||  ( type && comp_table[index].  comp == NULL)
+    ||  (         comp_table[index].decomp == NULL)) {
+        if (type)
+            dk_set_error("Unsupported compression type.\n");
+        else
+            dk_set_error("Unsupported decompression type.\n");
+        return NULL;
     }
-    dk_set_error("Unsupported compression type.\n");
-    return NULL;
+    return &comp_table[index];
 }
+
 
 
 
@@ -182,26 +213,34 @@ int dk_compress_mem_to_mem (
     unsigned char *input,
     size_t input_size
 ) {
-    int (*dk_compress)(struct COMPRESSOR*);
+    const struct COMP_TYPE *dk_compress = get_compressor(comp_type, 1);
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
 
-    if ((dk_compress = get_compressor(comp_type)) == NULL)
+    if (dk_compress == NULL)
         return 1;
-    if (check_input_mem(input, input_size, 1))
+    if (check_input_mem(input))
         return 1;
 
-    cmp.input     = input;
-    cmp.input_len = input_size;
+    cmp.in.data   = input;
+    cmp.in.length = input_size;
+    cmp.out.limit = 1 << dk_compress->size_limit;
 
-    if (open_output_buffer(&cmp.output, OUTPUT_LIMIT))
+    if (open_output_buffer(&cmp.out.data, cmp.out.limit))
         return 1;
-    if (dk_compress(&cmp)) {
-        free(cmp.output);
+    if (dk_compress->comp(&cmp)) {
+        free(cmp.out.data);
         return 1;
     }
-    *output      = cmp.output;
-    *output_size = cmp.outpos;
+#if VERIFY_DATA
+    if (verify_data(comp_type, &cmp)) {
+        free(cmp.out.data);
+        return 1;
+    }
+#endif
+
+    *output      = cmp.out.data;
+    *output_size = cmp.out.pos;
     return 0;
 }
 
@@ -211,26 +250,31 @@ int dk_compress_file_to_mem (
     size_t *output_size,
     const char *file_in
 ) {
-    int (*dk_compress)(struct COMPRESSOR*);
+    const struct COMP_TYPE *dk_compress = get_compressor(comp_type, 1);
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
 
-    if ((dk_compress = get_compressor(comp_type)) == NULL)
+    if (dk_compress == NULL)
         return 1;
-    if (open_input_file(file_in, &cmp.input, &cmp.input_len, 0, 1))
+    if (open_input_file(file_in, &cmp.in.data, &cmp.in.length, 0, 1))
         goto error;
-    if (open_output_buffer(&cmp.output, OUTPUT_LIMIT))
+    cmp.out.limit = 1 << dk_compress->size_limit;
+    if (open_output_buffer(&cmp.out.data, cmp.out.limit))
         goto error;
-    if (dk_compress(&cmp))
+    if (dk_compress->comp(&cmp))
         goto error;
+#if VERIFY_DATA
+    if (verify_data(comp_type, &cmp))
+        goto error;
+#endif
 
-    free(cmp.input);
-    *output      = cmp.output;
-    *output_size = cmp.outpos;
+    free(cmp.in.data);
+    *output      = cmp.out.data;
+    *output_size = cmp.out.pos;
     return 0;
 error:
-    free(cmp.input);
-    free(cmp.output);
+    free(cmp.in.data);
+    free(cmp.out.data);
     return 1;
 }
 
@@ -276,23 +320,6 @@ int dk_compress_file_to_file (
 
 
 
-/* Check whether a decompressor is supported */
-
-int (*get_decompressor(enum DK_FORMAT decomp_type))(struct COMPRESSOR*) {
-    switch (decomp_type) {
-        case     BD_DECOMP: { return     bd_decompress; }
-        case     SD_DECOMP: { return     sd_decompress; }
-        case DKCCHR_DECOMP: { return dkcchr_decompress; }
-        case DKCGBC_DECOMP: { return dkcgbc_decompress; }
-        case    DKL_DECOMP: { return    dkl_decompress; }
-        default: { break; }
-    }
-    dk_set_error("Unsupported decompression type.\n");
-    return NULL;
-}
-
-
-
 /* Decompression handlers */
 
 int dk_decompress_mem_to_mem (
@@ -302,27 +329,28 @@ int dk_decompress_mem_to_mem (
     unsigned char *input,
     size_t input_size
 ) {
-    int (*dk_decompress)(struct COMPRESSOR*);
+    const struct COMP_TYPE *dk_decompress = get_compressor(decomp_type, 0);
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
 
-    if ((dk_decompress = get_decompressor(decomp_type)) == NULL)
+    if (dk_decompress == NULL)
         return 1;
-    if (check_input_mem(input, input_size, 0))
-        return 1;
-
-    dc.input     = input;
-    dc.input_len = input_size;
-
-    if (open_output_buffer(&dc.output, 0x10000))
+    if (check_input_mem(input))
         return 1;
 
-    if (dk_decompress(&dc)) {
-        free(dc.output);
+    dc.in.data   = input;
+    dc.in.length = input_size;
+    dc.out.limit = 1 << dk_decompress->size_limit;
+
+    if (open_output_buffer(&dc.out.data, dc.out.limit))
+        return 1;
+
+    if (dk_decompress->decomp(&dc)) {
+        free(dc.out.data);
         return 1;
     }
-    *output      = dc.output;
-    *output_size = dc.outpos;
+    *output      = dc.out.data;
+    *output_size = dc.out.pos;
     return 0;
 }
 int dk_decompress_file_to_mem (
@@ -332,26 +360,27 @@ int dk_decompress_file_to_mem (
     const char *file_in,
     size_t position
 ) {
-    int (*dk_decompress)(struct COMPRESSOR*);
+    const struct COMP_TYPE *dk_decompress = get_compressor(decomp_type, 0);
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
 
-    if ((dk_decompress = get_decompressor(decomp_type)) == NULL)
+    if (dk_decompress == NULL)
         return 1;
-    if (open_input_file(file_in, &dc.input, &dc.input_len, position, 0))
+    if (open_input_file(file_in, &dc.in.data, &dc.in.length, position, 0))
         goto error;
-    if (open_output_buffer(&dc.output, 0x10000))
+    dc.out.limit = 1 << dk_decompress->size_limit;
+    if (open_output_buffer(&dc.out.data, dc.out.limit))
         goto error;
-    if (dk_decompress(&dc))
+    if (dk_decompress->decomp(&dc))
         goto error;
 
-    free(dc.input);
-    *output      = dc.output;
-    *output_size = dc.outpos;
+    free(dc.in.data);
+    *output      = dc.out.data;
+    *output_size = dc.out.pos;
     return 0;
 error:
-    free(dc.input);
-    free(dc.output);
+    free(dc.in.data);
+    free(dc.out.data);
     return 1;
 }
 

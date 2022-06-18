@@ -2,9 +2,15 @@ cmake_minimum_required(VERSION 3.10)
 
 project(dkcomp)
 
-set(  comp_src   bd_comp_core.c   sd_comp_core.c)
-set(decomp_src bd_decomp_core.c sd_decomp_core.c dkcchr_decomp_core.c dkcgbc_decomp_core.c dkl_decomp_core.c)
-set(dkcommon dk_comp_lib.c dk_internal.h ${comp_src} ${decomp_src})
+set(comp_src
+    bd_comp_core.c bd_decomp_core.c
+    sd_comp_core.c sd_decomp_core.c
+    dkcchr_decomp_core.c      dkcgbc_decomp_core.c
+    dkl_decomp_core.c
+    dkc2gba_decomp_core.c     dkc2_alt.c
+    gba_huffman.c gba_lz77.c gba_rle.c gba.c
+)
+set(dkcommon dk_comp_lib.c dk_internal.h ${comp_src} )
 
 option(BUILD_COMP   "Build the standalone compressor"   ON)
 option(BUILD_DECOMP "Build the standalone decompressor" ON)
