@@ -10,9 +10,11 @@ int gba_decompress (struct COMPRESSOR *gba) {
     }
 
     switch (*gba->in.data >> 4) {
-        case 1: { return gbalz77_decompress(gba); }
-        case 2: { return gbahuff_decompress(gba); }
-        case 3: { return  gbarle_decompress(gba); }
+        case 1: { return   gbalz77_decompress(gba); }
+        case 2: { return gbahuff20_decompress(gba); }
+        case 3: { return    gbarle_decompress(gba); }
+        case 5: { return gbahuff50_decompress(gba); }
+        case 6: { return gbahuff60_decompress(gba); }
     }
     dk_set_error("Unable to detect compression type.");
     return 1;

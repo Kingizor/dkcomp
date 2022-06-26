@@ -147,7 +147,7 @@ static void update_weights (struct BIN *bin, int node) {
     }
 }
 
-int rarehuf_decompress (struct COMPRESSOR *dk) {
+int gbahuff60_decompress (struct COMPRESSOR *dk) {
 
     /* tree consists of:
          - two special leafs     (the "new value" and "quit" commands)
@@ -261,7 +261,7 @@ static int encode_leaf (struct BIN *bin, struct NODE *n) {
     return 0;
 }
 
-int rarehuf_compress (struct COMPRESSOR *dk) {
+int gbahuff60_compress (struct COMPRESSOR *dk) {
 
     struct NODE tree[515] = {
         { CNODE, 2, -1, .dir.L = 1, .dir.R = 2 },

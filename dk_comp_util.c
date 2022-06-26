@@ -28,14 +28,15 @@ int main (int argc, char *argv[]) {
         enum DK_FORMAT id;
         char *name;
     } formats[] = {
-        {       BD_COMP, "SNES DKC2/DKC3 Big Data" },
-        {       SD_COMP, "SNES DKC3 Small Data"    },
-        {   DKCCHR_COMP, "SNES DKC Tile Data"      },
-        {   DKCGBC_COMP, " GBC DKC Layout"         },
-        { RAREHUFF_COMP, " GBA DKC2/DKC3 Huffman"  },
-        { GBA_HUFF_COMP, " GBA BIOS Huffman"       },
-        { GBA_LZ77_COMP, " GBA BIOS LZ77"          },
-        {  GBA_RLE_COMP, " GBA BIOS RLE"           }
+        {        BD_COMP, "SNES DKC2/DKC3 Big Data"},
+        {        SD_COMP, "SNES DKC3 Small Data"   },
+        {    DKCCHR_COMP, "SNES DKC Tile Data"     },
+        {    DKCGBC_COMP, " GBC DKC Layout"        },
+        {GBA_HUFF60_COMP, " GBA Huffman (60)"      },
+        {GBA_HUFF50_COMP, " GBA Huffman (50)"      },
+        {GBA_HUFF20_COMP, " GBA BIOS Huffman"      },
+        {  GBA_LZ77_COMP, " GBA BIOS LZ77"         },
+        {   GBA_RLE_COMP, " GBA BIOS RLE"          }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
     int i, format = 0;

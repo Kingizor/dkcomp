@@ -18,18 +18,18 @@
 */
 
 enum DK_FORMAT {
-      BD_COMP,
-      SD_COMP,
-  DKCCHR_COMP,
-  DKCGBC_COMP,
-     DKL_COMP,
-RAREHUFF_COMP,
- RAREPRO_COMP,
-GBA_HUFF_COMP,
-GBA_LZ77_COMP,
- GBA_RLE_COMP,
-     GBA_COMP, /* auto-detect lz77/huff/rle */
-    COMP_LIMIT
+        BD_COMP,
+        SD_COMP,
+    DKCCHR_COMP,
+    DKCGBC_COMP,
+       DKL_COMP,
+GBA_HUFF60_COMP,
+GBA_HUFF50_COMP,
+GBA_HUFF20_COMP,
+  GBA_LZ77_COMP,
+   GBA_RLE_COMP,
+       GBA_COMP, /* auto-detect GBA */
+      COMP_LIMIT
 };
 
 

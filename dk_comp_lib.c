@@ -172,17 +172,17 @@ struct COMP_TYPE {
 };
 
 static const struct COMP_TYPE comp_table[] = {
-    [      BD_COMP] = { 16,      bd_compress,      bd_decompress },
-    [      SD_COMP] = { 16,      sd_compress,      sd_decompress },
-    [  DKCCHR_COMP] = { 16,  dkcchr_compress,  dkcchr_decompress },
-    [  DKCGBC_COMP] = { 12,  dkcgbc_compress,  dkcgbc_decompress },
-    [     DKL_COMP] = { 16,             NULL,     dkl_decompress },
-    [RAREHUFF_COMP] = { 24, rarehuf_compress, rarehuf_decompress },
-    [ RAREPRO_COMP] = { 24, rarepro_compress, rarepro_decompress },
-    [GBA_HUFF_COMP] = { 24, gbahuff_compress, gbahuff_decompress },
-    [GBA_LZ77_COMP] = { 24, gbalz77_compress, gbalz77_decompress },
-    [ GBA_RLE_COMP] = { 24,  gbarle_compress,  gbarle_decompress },
-    [     GBA_COMP] = { 24,             NULL,     gba_decompress }
+    [        BD_COMP] = { 16,        bd_compress,        bd_decompress },
+    [        SD_COMP] = { 16,        sd_compress,        sd_decompress },
+    [    DKCCHR_COMP] = { 16,    dkcchr_compress,    dkcchr_decompress },
+    [    DKCGBC_COMP] = { 12,    dkcgbc_compress,    dkcgbc_decompress },
+    [       DKL_COMP] = { 16,               NULL,       dkl_decompress },
+    [GBA_HUFF60_COMP] = { 24, gbahuff60_compress, gbahuff60_decompress },
+    [GBA_HUFF50_COMP] = { 24, gbahuff50_compress, gbahuff50_decompress },
+    [GBA_HUFF20_COMP] = { 24, gbahuff20_compress, gbahuff20_decompress },
+    [  GBA_LZ77_COMP] = { 24,   gbalz77_compress,   gbalz77_decompress },
+    [   GBA_RLE_COMP] = { 24,    gbarle_compress,    gbarle_decompress },
+    [       GBA_COMP] = { 24,               NULL,       gba_decompress }
 };
 
 

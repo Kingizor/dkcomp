@@ -49,7 +49,7 @@ static int write_out (struct COMPRESSOR *gba, int bit) {
     return 0;
 }
 
-int gbahuff_decompress (struct COMPRESSOR *gba) {
+int gbahuff20_decompress (struct COMPRESSOR *gba) {
 
     size_t output_size;
     int data_size; /* how many bits per leaf */
@@ -379,7 +379,7 @@ static int encode_data (
     return 0;
 }
 
-int gbahuff_compress (struct COMPRESSOR *gba) {
+int gbahuff20_compress (struct COMPRESSOR *gba) {
     struct NODE leaf_tree[256];
     struct NODE node_tree[256];
     struct VLUT vlut[256];
