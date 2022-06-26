@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: MIT
- * Big Data Compression Library
- * Copyright (c) 2020-2021 Kingizor */ 
+ * Copyright (c) 2020-2021 Kingizor
+ * dkcomp library - SNES DKC2/DKC3 big data decompressor */ 
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "dk_internal.h"

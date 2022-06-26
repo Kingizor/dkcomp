@@ -1,7 +1,9 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2022 Kingizor
+ * dkcomp library - GBA auto-detect decompressor */
+
 #include <stdlib.h>
 #include "dk_internal.h"
-
-/* auto-detect GBA BIOS Huffman/LZ77/RLE formats */
 
 int gba_decompress (struct COMPRESSOR *gba) {
     if (gba->in.length < 1) {

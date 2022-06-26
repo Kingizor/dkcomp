@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
- * DK Compression/Decompression Library
- * Copyright (c) 2020-2022 Kingizor */
+ * Copyright (c) 2020-2022 Kingizor
+ * dkcomp library - application programming interface */
 
 #include <stdio.h>
 #include <stdlib.h>

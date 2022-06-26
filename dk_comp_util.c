@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2020-2022 Kingizor
+ * dkcomp library - compression utility */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,11 +36,11 @@ int main (int argc, char *argv[]) {
         {        SD_COMP, "SNES DKC3 Small Data"   },
         {    DKCCHR_COMP, "SNES DKC Tile Data"     },
         {    DKCGBC_COMP, " GBC DKC Layout"        },
-        {GBA_HUFF60_COMP, " GBA Huffman (60)"      },
+        {  GBA_LZ77_COMP, " GBA BIOS LZ77 (10)"    },
+        {GBA_HUFF20_COMP, " GBA BIOS Huffman (20)" },
+        {   GBA_RLE_COMP, " GBA BIOS RLE (30)"     },
         {GBA_HUFF50_COMP, " GBA Huffman (50)"      },
-        {GBA_HUFF20_COMP, " GBA BIOS Huffman"      },
-        {  GBA_LZ77_COMP, " GBA BIOS LZ77"         },
-        {   GBA_RLE_COMP, " GBA BIOS RLE"          }
+        {GBA_HUFF60_COMP, " GBA Huffman (60)"      }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
     int i, format = 0;

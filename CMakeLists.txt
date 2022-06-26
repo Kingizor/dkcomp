@@ -3,12 +3,11 @@ cmake_minimum_required(VERSION 3.10)
 project(dkcomp)
 
 set(comp_src
-    bd_comp_core.c bd_decomp_core.c
-    sd_comp_core.c sd_decomp_core.c
-    dkcchr_decomp_core.c      dkcgbc_decomp_core.c
-    dkl_decomp_core.c
-    dkc2gba_decomp_core.c     dkc2_alt.c
-    gba_huffman.c gba_lz77.c gba_rle.c gba.c
+    bd_comp_core.c bd_decomp_core.c sd_comp_core.c
+    dkcchr_decomp_core.c
+    dkcgbc_decomp_core.c dkl_decomp_core.c
+    gbahuff20.c gbahuff50.c gbahuff60.c
+    gba_lz77.c gba_rle.c gba.c
 )
 set(dkcommon dk_comp_lib.c dk_internal.h ${comp_src} )
 

@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: MIT
- * DKC CHR Compression Library
- * Copyright (c) 2020-2022 Kingizor */
+ * Copyright (c) 2020-2022 Kingizor
+ * dkcomp library - DKC CHR compressor and decompressor */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "dk_internal.h"

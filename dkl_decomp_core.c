@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: MIT
- * DKL Decompression Library
- * Copyright (c) 2022 Kingizor */
+ * Copyright (c) 2021-2022 Kingizor
+ * dkcomp library - DKL layout decompressor */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include "dk_internal.h"
 

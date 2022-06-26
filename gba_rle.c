@@ -1,3 +1,7 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2022 Kingizor
+ * dkcomp library - GBA BIOS RLE compressor and decompressor */
+
 #include <stdlib.h>
 #include "dk_internal.h"
 

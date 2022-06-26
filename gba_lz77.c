@@ -1,7 +1,9 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2022 Kingizor
+ * dkcomp library - GBA BIOS LZ77 compressor and decompressor */
+
 #include <stdlib.h>
 #include "dk_internal.h"
-
-/* compression and decompression functions for GBA/DS LZ77 */
 
 static int read_byte (struct COMPRESSOR *gba) {
     if (gba->in.pos >= gba->in.length) {

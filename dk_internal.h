@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
- * Big Data Compression Library
- * Copyright (c) 2020 Kingizor */
+ * Copyright (c) 2020-2022 Kingizor
+ * dkcomp library */
 
 #ifndef DK_INTERNAL
 #define DK_INTERNAL

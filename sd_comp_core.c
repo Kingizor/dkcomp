@@ -1,10 +1,181 @@
 /* SPDX-License-Identifier: MIT
- * Small Data Compression Library
- * Copyright (c) 2020 Kingizor */
+ * Copyright (c) 2020-2022 Kingizor
+ * dkcomp library - SNES DKC3 small data compressor and decompressor */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include "dk_internal.h"
+
+/* decompressor */
+
+static int read_byte (struct COMPRESSOR *sd, size_t addr) {
+    if (addr >= sd->in.length) {
+        dk_set_error("Tried to read out of bounds.");
+        return -1;
+    }
+    return sd->in.data[addr];
+}
+static int read_word (struct COMPRESSOR *sd, size_t addr) {
+    int r0, r1;
+    if ((r0 = read_byte(sd, addr))   < 0
+    ||  (r1 = read_byte(sd, addr+1)) < 0)
+        return -1;
+    return r0 | (r1 << 8);
+}
+
+/* read n bits from input */
+static int read_bits (struct COMPRESSOR *sd, int count) {
+    unsigned val = 0;
+    while (count--) {
+        unsigned char bit;
+        int v = read_byte(sd, sd->in.pos);
+        if (v < 0)
+            return -1;
+        bit = !!(v & (1 << (sd->in.bitpos ^ 7)));
+        val |= bit << count;
+        if (++sd->in.bitpos == 8) {
+            sd->in.pos++;
+            sd->in.bitpos = 0;
+        }
+    }
+    return val;
+}
+
+/* modify word (all writes are rmw) */
+static int modify_word (struct COMPRESSOR *sd, size_t addr, int val) {
+    addr <<= 1;
+    if (addr+1 >= sd->out.limit) {
+        dk_set_error("Attempted to write out of bounds.");
+        return -1;
+    }
+    sd->out.data[addr  ] |= val;
+    sd->out.data[addr+1] |= val >> 8;
+    return 0;
+}
+
+
+/* These routines (four variants) determine the upper 6 bits */
+static int sub_decompress (struct COMPRESSOR *sd, int mode) {
+
+    size_t addr = 0;
+    unsigned shift, count_size, val_size;
+    if (mode == 3) {
+          val_size = 3;
+        count_size = 4;
+        shift = 10;
+    }
+    else {
+          val_size = 1;
+        count_size = 6;
+        shift = 13 + mode;
+    }
+
+    for (;;) {
+        int loop, val, count;
+        if ((loop  = read_bits(sd, 1)) < 0)
+            return 1;
+        if ((val   = read_bits(sd, val_size)) < 0)
+            return 1;
+        val <<= shift;
+        if (loop) {
+            if ((count = read_bits(sd, count_size)) < 0)
+                return 1;
+        }
+        else {
+            count = 1;
+        }
+        if (!count)
+            break;
+        while (count--)
+            if (modify_word(sd, addr++, val))
+                return 1;
+    }
+    return 0;
+}
+
+/* This routine determines values to be placed in the low 10 bits */
+static int  main_decompress (struct COMPRESSOR *sd) {
+
+    size_t addr = 0;
+
+    for (;;) {
+        unsigned char  mode = read_bits(sd,  2);
+        unsigned short val  = read_bits(sd, 10);
+        int count;
+
+        if (!mode) { /* write single value once */
+            count = 1;
+        }
+        else if (mode == 1) { /* write single value 1-63 times  */
+            if ((count = read_bits(sd, 6)) < 0)
+                return 1;
+            if (!count) /* Quit if zero */
+                break;
+        }
+        else { /* write incrementing or decrementing value 1-15 times */
+            if ((count = read_bits(sd, 4)) < 0)
+                return 1;
+
+            /* These cases don't have the exit condition,
+               so the game would write 65536 values in succession */
+            if (!count) {
+                dk_set_error(
+                    "Encountered an exit condition in a case without "
+                    "an exit check."
+                );
+                return 1;
+            }
+        }
+
+        while (count--) {
+            if (modify_word(sd, addr++, val))
+                return 1;
+            if (mode == 2)
+                val++;
+            else if (mode == 3)
+                val--;
+            val &= 0x3FF;
+        }
+    }
+    return 0;
+}
+
+int sd_decompress (struct COMPRESSOR *sd) {
+
+    int i, subs;
+
+    /* first byte indicates which subs to call */
+    if ((subs = read_byte(sd, sd->in.pos + 0)) < 0)
+        return 1;
+    subs &= 7;
+
+    /* next word is the output size in words */
+    if ((i = read_word(sd, sd->in.pos + 1)) < 0)
+        return 1;
+    sd->out.pos  = i << 1;
+
+    sd->in.pos  += 3;
+
+    /* first three subs are optional */
+    for (i = 0; i < 3; i++)
+        if (subs & (1 << i))
+            if (sub_decompress(sd, i)) /* {2,4,8}000 */
+                return 1;
+
+    /* fourth sub and the main routine are mandatory */
+    if (sub_decompress(sd, 3)) /* 1C00 */
+        return 1;
+    if (main_decompress(sd))   /* 03FF */
+        return 1;
+    return 0;
+}
+
+
+
+
+
+
+
+/* compressor */
 
 /* push bits to the output */
 static int write_bits (struct COMPRESSOR *sd, int count, unsigned val) {
@@ -94,14 +265,6 @@ static int encode_subs (
     return 0;
 }
 
-static int rw (struct COMPRESSOR *sd, int addr) {
-    if ((sd->in.pos+addr+2) > sd->in.length) {
-        dk_set_error("Attempted to read past end of input file");
-        return -1;
-    }
-    return (sd->in.data[addr+1] << 8) | sd->in.data[addr+0];
-}
-
 static int encode_main (struct COMPRESSOR *sd) {
 
     size_t i;
@@ -112,7 +275,7 @@ static int encode_main (struct COMPRESSOR *sd) {
 
         /* Read current word */
         int w;
-        if ((w = rw(sd, i)) == -1)
+        if ((w = read_word(sd, i)) < 0)
             return 1;
         unsigned short w1 = w & 0x3FF;
 
@@ -122,7 +285,7 @@ static int encode_main (struct COMPRESSOR *sd) {
             int lim;
 
             /* Read next word */
-            if ((w = rw(sd, addr)) == -1)
+            if ((w = read_word(sd, addr)) < 0)
                 return 1;
             unsigned short w2 = w & 0x3FF;
 
@@ -141,7 +304,7 @@ static int encode_main (struct COMPRESSOR *sd) {
                 addr += 2;
                 if (addr >= sd->in.length)
                     break;
-                if ((w = rw(sd, i)) == -1)
+                if ((w = read_word(sd, i)) < 0)
                     return 1;
                 w3 = w & 0x3FF;
                 if ((w3 - w2) != diff)
