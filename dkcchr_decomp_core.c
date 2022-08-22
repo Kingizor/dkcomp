@@ -8,10 +8,8 @@
 
 /* Read a byte from input */
 static int read_byte (struct COMPRESSOR *dk) {
-    if (dk->in.pos >= dk->in.length) {
-        dk_set_error("Tried to read out of bounds. (input)");
+    if (dk->in.pos >= dk->in.length)
         return -1;
-    }
     return dk->in.data[dk->in.pos++];
 }
 static int read_word (struct COMPRESSOR *dk) {
@@ -33,19 +31,15 @@ static int read_lut (struct COMPRESSOR *dk, unsigned char addr) {
 
 /* Read a byte from output */
 static int read_out (struct COMPRESSOR *dk, size_t addr) {
-    if (addr >= dk->out.pos) {
-        dk_set_error("Tried to read out of bounds. (output)");
+    if (addr >= dk->out.pos)
         return -1;
-    }
     return dk->out.data[addr];
 }
 
 /* Write a byte from output */
 static int write_byte (struct COMPRESSOR *dk, unsigned char val) {
-    if (dk->out.pos >= dk->out.limit) {
-        dk_set_error("Tried to write out of bounds");
-        return -1;
-    }
+    if (dk->out.pos >= dk->out.limit)
+        return 1;
     dk->out.data[dk->out.pos++] = val;
     return 0;
 }
@@ -64,35 +58,40 @@ int dkcchr_decompress (struct COMPRESSOR *dk) {
 
         switch (mode) {
             case 0: { /* Copy n bytes from input */
-                while (n--)
-                    if ((v = read_byte(dk)) < 0
-                    ||      write_byte(dk, v))
-                        return 1;
+                while (n--) {
+                    if ((v = read_byte(dk)) < 0)
+                        return DK_ERROR_OOB_INPUT;
+                    if (write_byte(dk, v))
+                        return DK_ERROR_OOB_OUTPUT_W;
+                }
                 break;
             }
             case 1: { /* Write a byte, n times */
                 if ((v = read_byte(dk)) < 0)
-                    return 1;
+                    return DK_ERROR_OOB_INPUT;
                 while (n--)
                     if (write_byte(dk, v))
-                        return 1;
+                        return DK_ERROR_OOB_OUTPUT_W;
                 break;
             }
             case 2: { /* Copy n bytes from output */
-                int pos = read_word(dk);
-                if (pos < 0)
-                    return 1;
-                while (n--)
-                    if ((v = read_out(dk, pos++)) < 0
-                    ||     write_byte(dk, v))
-                        return 1;
+                int pos;
+                if ((pos = read_word(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                while (n--) {
+                    if ((v = read_out(dk, pos++)) < 0)
+                        return DK_ERROR_OOB_OUTPUT_R;
+                    if (write_byte(dk, v))
+                        return DK_ERROR_OOB_OUTPUT_W;
+                }
                 break;
             }
             case 3: { /* Copy a word from the input LUT */
-                if ((v = read_lut(dk, n << 1)) < 0
-                ||     write_byte(dk, v)
-                ||     write_byte(dk, v >> 8))
-                    return 1;
+                if ((v = read_lut(dk, n << 1)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                if (write_byte(dk, v)
+                ||  write_byte(dk, v >> 8))
+                    return DK_ERROR_OOB_OUTPUT_W;
                 break;
             }
         }
@@ -186,7 +185,7 @@ static void u16_count (
     }
 }
 
-static int lut_count (
+static void lut_count (
     struct BIN *bin,
     int count_mode,
     int copy_mode,
@@ -236,8 +235,6 @@ static int lut_count (
 
     /* ascending by value */
     qsort(bin->lut, 64, sizeof(unsigned short), sort_us);
-
-    return 0;
 }
 
 
@@ -358,7 +355,7 @@ static void test_cases (struct BIN *bin, int use_lut) {
     test_case_0(bin, i);
 }
 
-static int run_case (struct BIN *bin, int n) {
+static void run_case (struct BIN *bin, int n) {
     memset(bin->lut, 0, 64*sizeof(unsigned short));
     reset_steps(bin);
 
@@ -401,7 +398,6 @@ static int run_case (struct BIN *bin, int n) {
             break;
         }
     }
-    return 0;
 }
 
 
@@ -415,7 +411,7 @@ static int write_data (struct BIN *bin) {
     for (i = 0; i < 64; i++)
         if (write_byte(dk, bin->lut[i])
         ||  write_byte(dk, bin->lut[i] >> 8))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
 
     /* encode the input data */
     while (step != &bin->steps[dk->in.length]) {
@@ -424,19 +420,19 @@ static int write_data (struct BIN *bin) {
 
         /* control byte */
         if (write_byte(dk, (nc->mode << 6) | nc->count))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
 
         /* data bytes */
         switch (nc->mode) {
             case 0: { /* copy */
                 for (i = 0; i < nc->count; i++)
                     if (write_byte(dk, dk->in.data[dk->in.pos++]))
-                        return 1;
+                        return DK_ERROR_OOB_OUTPUT_W;
                 break;
             }
             case 1: { /* RLE */
                 if (write_byte(dk, dk->in.data[dk->in.pos]))
-                    return 1;
+                    return DK_ERROR_OOB_OUTPUT_W;
                 dk->in.pos += nc->count;
                 break;
             }
@@ -444,7 +440,7 @@ static int write_data (struct BIN *bin) {
                 dk->in.pos += nc->count;
                 if (write_byte(dk, nc->addr)
                 ||  write_byte(dk, nc->addr >> 8))
-                    return 1;
+                    return DK_ERROR_OOB_OUTPUT_W;
                 break;
             }
             case 3: {
@@ -459,57 +455,47 @@ static int write_data (struct BIN *bin) {
 
 
 int dkcchr_compress (struct COMPRESSOR *dk) {
-    struct BIN bin;
+    struct BIN bin = { dk, NULL, NULL, {0} };
     size_t least_used_c = -1llu;
     int    least_used_n = 0;
     int i;
+    enum DK_ERROR e;
     bin.dk = dk;
 
     bin.steps = malloc(sizeof(struct PATH) * (dk->in.length+1));
-    if (bin.steps == NULL) {
-        dk_set_error("Failed to allocate memory for path");
-        return 1;
-    }
-    bin.lutc = malloc(65536*sizeof(struct U16));
-    if (bin.lutc == NULL) {
-        dk_set_error("Failed to allocate memory for LUT counter");
+    bin.lutc  = malloc(65536*sizeof(struct U16));
+    if (bin.steps == NULL
+    ||  bin.lutc == NULL) {
+        free(bin.lutc);
         free(bin.steps);
-        return 1;
+        return DK_ERROR_ALLOC;
     }
 
     /* try a number of strategies */
     if (0) {
         for (i = 0; i < CASE_COUNT; i++) {
-            if (run_case(&bin, i))
-                goto error;
+            run_case(&bin, i);
             if (least_used_c > bin.steps[dk->in.length].used) {
                 least_used_c = bin.steps[dk->in.length].used;
                 least_used_n = i;
             }
         }
         /* stick with the best case */
-        if (run_case(&bin, least_used_n))
-            goto error;
+        run_case(&bin, least_used_n);
     }
     else {
         /* strategy #2 tends to work best for tilesets */
-        if (run_case(&bin, 2))
-            goto error;
+        run_case(&bin, 2);
     }
 
     /* reverse path direction */
     reverse_path(&bin);
 
     /* write the output */
-    if (write_data(&bin))
-        goto error;
+    e = write_data(&bin);
 
     free(bin.steps);
     free(bin.lutc);
-    return 0;
-error:
-    free(bin.steps);
-    free(bin.lutc);
-    return 1;
+    return e;
 }
 

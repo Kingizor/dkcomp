@@ -6,10 +6,8 @@
 #include "dk_internal.h"
 
 int gba_decompress (struct COMPRESSOR *gba) {
-    if (gba->in.length < 1) {
-        dk_set_error("Input data too short!");
-        return 1;
-    }
+    if (gba->in.length < 5)
+        return DK_ERROR_EARLY_EOF;
 
     switch (*gba->in.data >> 4) {
         case 1: { return   gbalz77_decompress(gba); }
@@ -18,7 +16,6 @@ int gba_decompress (struct COMPRESSOR *gba) {
         case 5: { return gbahuff50_decompress(gba); }
         case 6: { return gbahuff60_decompress(gba); }
     }
-    dk_set_error("Unable to detect compression type.");
-    return 1;
+    return DK_ERROR_GBA_DETECT;
 }
 

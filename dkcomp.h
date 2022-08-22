@@ -34,7 +34,7 @@ GBA_HUFF20_COMP,
 
 
 /* Error reporting */
-const char *dk_get_error (void);
+const char *dk_get_error (int);
 
 
 /* Compression functions */

@@ -6,200 +6,228 @@
 #include <string.h>
 #include "dk_internal.h"
 
-static int write_out (struct COMPRESSOR *dc, unsigned char val) {
-    if (dc->out.pos > 0xFFFF) {
-        dk_set_error("Attempted to write out of bounds.");
+static int write_byte (struct COMPRESSOR *dk, unsigned char val) {
+    if (dk->out.pos >= dk->out.limit)
         return -1;
-    }
-    dc->out.data[dc->out.pos++] = val;
+    dk->out.data[dk->out.pos++] = val;
     return 0;
 }
-static int read_out (struct COMPRESSOR *dc, unsigned short v) {
-
-    int addr = dc->out.pos - v;
-
-    if (addr < 0 || addr > 0xFFFF) {
-        dk_set_error("Attempted to read out of bounds.");
+static int read_out (struct COMPRESSOR *dk, unsigned short v) {
+    size_t addr = dk->out.pos - v;
+    if (addr > dk->out.pos || addr >= dk->out.limit)
         return -1;
-    }
-
-    return dc->out.data[addr];
+    return dk->out.data[addr];
 }
 
-static unsigned char rn (struct COMPRESSOR *dc) { /* read nibble */
-    if (dc->in.pos >= dc->in.length) {
-        dk_set_error("Attempted to read past end of input.");
+static int read_nibble (struct COMPRESSOR *dk) {
+    if (dk->in.pos >= dk->in.length)
         return -1;
-    }
-
-    dc->in.bitpos ^= 4;
-
-    if (dc->in.bitpos) {
-        return dc->in.data[dc->in.pos  ] >> 4; /* hi 1st */
-    }   return dc->in.data[dc->in.pos++] & 15; /* lo 2nd */
+    dk->in.bitpos ^= 4;
+    if (dk->in.bitpos) {
+        return dk->in.data[dk->in.pos  ] >> 4; /* hi 1st */
+    }   return dk->in.data[dk->in.pos++] & 15; /* lo 2nd */
 }
-static int rb (struct COMPRESSOR *dc) { /* read byte */
+static int read_byte (struct COMPRESSOR *dk) { /* read byte */
     int hi,lo;
-    if ((hi = rn(dc)) < 0
-    ||  (lo = rn(dc)) < 0)
+    if ((hi = read_nibble(dk)) < 0
+    ||  (lo = read_nibble(dk)) < 0)
         return -1;
     return (hi << 4)|lo;
 }
 
-static int decode_case (struct COMPRESSOR *dc) {
-
-    int c = rn(dc);
-    if (c < 0)
-        return 2;
-
-    switch (c) {
-
-        /* Copy n bytes */
-        case 0: {
-            int i = rn(dc);
-            if (!i)
-                return 1;
-            while (i--) 
-                if (write_out(dc, rb(dc)))
-                    return 2;
-            break;
-        }
-
-        /* Write two bytes */
-        case 2: {
-            if (write_out(dc, rb(dc)))
-                return 2;
-        } /* FALLTHROUGH */
-
-        /* Write a byte */
-        case 1: {
-            if (write_out(dc, rb(dc)))
-                return 2;
-            break;
-        }
-
-        /* Write a byte 3-18 */
-        case 3: {
-            int i,z;
-            if ((i = rn(dc)) < 0
-            ||  (z = rb(dc)) < 0)
-                return 2;
-            i += 3;
-            while (i--)
-                if (write_out(dc, z))
-                    return 2;
-            break;
-        }
-
-        /* Write a constant 3-18 */
-        case  4: case  5: {
-            int i = rn(dc) + 3;
-            while (i--)
-                if (write_out(dc, dc->in.data[1 + (c & 1)]))
-                    return 2;
-            break;
-        }
-
-        /* Write a word constant */
-        case 6: {
-            if (write_out(dc, dc->in.data[5]))
-                return 2;
-            if (write_out(dc, dc->in.data[6]))
-                return 2;
-            break;
-        }
-
-        /* Write a byte constant */
-        case 7: case 8: {
-            if (write_out(dc, dc->in.data[3 + ((c ^ 1) & 1)]))
-                return 2;
-            break;
-        }
-
-        /* Write a recent word */
-        case 9: {
-            int addr = rn(dc) + 2;
-            if (write_out(dc, read_out(dc, addr)))
-                return 2;
-            if (write_out(dc, read_out(dc, addr)))
-                return 2;
-            break;
-        }
-
-        /* 8-bit window */
-        case 10: {
-            int i    = rn(dc) + 3;
-            int addr = rb(dc) + i;
-            while (i--)
-                if (write_out(dc, read_out(dc, addr)))
-                    return 2;
-            break;
-        }
-
-        /* 12-bit window */
-        case 11: {
-            int i     = rn(dc) + 3;
-            int addr  = rb(dc) << 4;
-                addr |= rn(dc);
-                addr += 0x103;
-            while (i--)
-                if (write_out(dc, read_out(dc, addr)))
-                    return 2;
-            break;
-        }
-
-        /* 16-bit window */
-        case 12: {
-            int i     = rn(dc) + 3;
-            int addr  = rb(dc) << 8;
-                addr |= rb(dc);
-            while (i--)
-                if (write_out(dc, read_out(dc, addr)))
-                    return 2;
-            break;
-        }
-
-        /* Repeat last byte */
-        case 13: {
-            if (write_out(dc, read_out(dc, 1)))
-                return 2;
-            break;
-        }
-
-        /* Repeat last word */
-        case 14: {
-            if (write_out(dc, read_out(dc, 2)))
-                return 2;
-            if (write_out(dc, read_out(dc, 2)))
-                return 2;
-            break;
-        }
-
-        /* Word LUT */
-        case 15: {
-            int addr = (rn(dc) << 1) + 7;
-            if (write_out(dc, dc->in.data[addr++]))
-                return 2;
-            if (write_out(dc, dc->in.data[addr  ]))
-                return 2;
-            break;
-        }
-    }
+static int relay_byte (struct COMPRESSOR *dk, int addr) {
+    int r;
+    if ((r = read_out(dk, addr)) < 0)
+        return DK_ERROR_OOB_OUTPUT_R;
+    if (write_byte(dk, r))
+        return DK_ERROR_OOB_OUTPUT_W;
     return 0;
 }
 
-int bd_decompress (struct COMPRESSOR *dc) {
+static int copy_byte (struct COMPRESSOR *dk) {
+    int v;
+    if ((v = read_byte(dk)) < 0)
+        return DK_ERROR_OOB_INPUT;
+    if (write_byte(dk, v))
+        return DK_ERROR_OOB_OUTPUT_W;
+    return 0;
+}
 
-    dc->out.pos = 0;
-    dc->in.pos  = 0x27;
-
+static int bd_loop (struct COMPRESSOR *dk) {
+    enum DK_ERROR e;
     for (;;) {
-        switch (decode_case(dc)) {
-            case 0: { continue; }
-            case 1: { return 0; }
-            case 2: { return 1; }
+        int c;
+        if ((c = read_nibble(dk)) < 0)
+            return DK_ERROR_OOB_INPUT;
+
+        switch (c) {
+
+            /* Copy n bytes */
+            case 0: {
+                int i;
+                if ((i = read_nibble(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                if (!i)
+                    return 0; /* done! */
+                while (i--) 
+                    if ((e = copy_byte(dk)))
+                        return e;
+                break;
+            }
+
+            /* Copy two bytes */
+            case 2: {
+                if ((e = copy_byte(dk)))
+                    return e;
+            } /* FALLTHROUGH */
+
+            /* Copy one byte */
+            case 1: {
+                if ((e = copy_byte(dk)))
+                    return e;
+                break;
+            }
+
+            /* Write a byte 3-18 */
+            case 3: {
+                int i,z;
+                if ((i = read_nibble(dk)) < 0
+                ||  (z = read_byte(dk))   < 0)
+                    return DK_ERROR_OOB_INPUT;
+                i += 3;
+                while (i--)
+                    if (write_byte(dk, z))
+                        return DK_ERROR_OOB_OUTPUT_W;
+                break;
+            }
+
+            /* Write a constant 3-18 */
+            case  4: case  5: {
+                int i;
+                if ((i = read_nibble(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                i += 3;
+                while (i--)
+                    if (write_byte(dk, dk->in.data[1 + (c & 1)]))
+                        return DK_ERROR_OOB_OUTPUT_W;
+                break;
+            }
+
+            /* Write a word constant */
+            case 6: {
+                if (write_byte(dk, dk->in.data[5])
+                ||  write_byte(dk, dk->in.data[6]))
+                    return DK_ERROR_OOB_OUTPUT_W;
+                break;
+            }
+
+            /* Write a byte constant */
+            case 7: case 8: {
+                if (write_byte(dk, dk->in.data[3 + ((c ^ 1) & 1)]))
+                    return DK_ERROR_OOB_OUTPUT_W;
+                break;
+            }
+
+            /* Write a recent word */
+            case 9: {
+                int addr;
+                if ((addr = read_nibble(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                addr += 2;
+                if ((e = relay_byte(dk, addr))
+                ||  (e = relay_byte(dk, addr)))
+                    return e;
+                break;
+            }
+
+            /* 8-bit window */
+            case 10: {
+                int i,addr;
+                if (  (i = read_nibble(dk)) < 0
+                || (addr = read_byte  (dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                i += 3;
+                addr += i;
+                while (i--)
+                    if ((e = relay_byte(dk, addr)))
+                        return e;
+                break;
+            }
+
+            /* 12-bit window */
+            case 11: {
+                int i,addr,lo;
+                if (  (i = read_nibble(dk)) < 0
+                || (addr = read_byte  (dk)) < 0
+                ||   (lo = read_nibble(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                i += 3;
+                addr = ((addr << 4) | lo) + 0x103;
+                while (i--)
+                    if ((e = relay_byte(dk, addr)))
+                        return e;
+                break;
+            }
+
+            /* 16-bit window */
+            case 12: {
+                int i,addr,lo;
+                if ((   i = read_nibble(dk)) < 0
+                ||  (addr =   read_byte(dk)) < 0
+                ||  (  lo =   read_byte(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                i += 3;
+                addr = (addr << 8) | lo;
+                while (i--)
+                    if ((e = relay_byte(dk, addr)))
+                        return e;
+                break;
+            }
+
+            /* Repeat last byte */
+            case 13: {
+                if ((e = relay_byte(dk, 1)))
+                    return e;
+                break;
+            }
+
+            /* Repeat last word */
+            case 14: {
+                if ((e = relay_byte(dk, 2))
+                ||  (e = relay_byte(dk, 2)))
+                    return e;
+                break;
+            }
+
+            /* Word LUT */
+            case 15: {
+                int addr;
+                if ((addr = read_nibble(dk)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                addr = (addr << 1) + 7;
+                if (write_byte(dk, dk->in.data[addr++])
+                ||  write_byte(dk, dk->in.data[addr  ]))
+                    return DK_ERROR_OOB_OUTPUT_W;
+                break;
+            }
         }
     }
-    return 0;
+
+}
+
+#include <stdio.h>
+int bd_decompress (struct COMPRESSOR *dk) {
+
+    enum DK_ERROR e;
+
+    if (dk->in.length < 0x27)
+        return DK_ERROR_INPUT_SMALL;
+
+    dk->out.pos = 0;
+    dk->in.pos  = 0x27;
+
+    e = bd_loop(dk);
+
+    return e;
 }
 

@@ -5,6 +5,71 @@
 #ifndef DK_INTERNAL
 #define DK_INTERNAL
 
+#include <stddef.h>
+
+#if defined(__GNUC__) || defined(__clang__)
+#define SHARED __attribute__ ((visibility ("default")))
+#elif defined(_MSC_VER)
+#define SHARED __declspec(dllexport)
+#else
+#define SHARED
+#endif
+
+enum DK_ERROR {
+    DK_SUCCESS,
+
+    DK_ERROR_OOB_INPUT,
+    DK_ERROR_OOB_OUTPUT_R,
+    DK_ERROR_OOB_OUTPUT_W,
+
+    DK_ERROR_ALLOC,
+
+    DK_ERROR_NULL_INPUT,
+    DK_ERROR_FILE_INPUT,
+    DK_ERROR_FILE_OUTPUT,
+    DK_ERROR_SEEK_INPUT,
+    DK_ERROR_FREAD,
+    DK_ERROR_FWRITE,
+
+    DK_ERROR_OFFSET_BIG,
+    DK_ERROR_OFFSET_NEG,
+    DK_ERROR_OFFSET_DIFF,
+
+    DK_ERROR_INPUT_SMALL,
+    DK_ERROR_INPUT_LARGE,
+    DK_ERROR_OUTPUT_SMALL,
+
+    DK_ERROR_SIZE_WRONG,
+    DK_ERROR_EARLY_EOF,
+
+    DK_ERROR_GBA_DETECT,
+    DK_ERROR_SIG_WRONG,
+
+    DK_ERROR_COMP_NOT,
+    DK_ERROR_DECOMP_NOT,
+
+    DK_ERROR_SD_BAD_EXIT,
+    DK_ERROR_LZ77_HIST,
+    DK_ERROR_HUFF_WRONG,
+    DK_ERROR_HUFF_LEAF,
+    DK_ERROR_HUFF_DIST,
+    DK_ERROR_HUFF_NO_LEAF,
+    DK_ERROR_HUFF_OUTSIZE,
+    DK_ERROR_HUFF_STACKS,
+    DK_ERROR_HUFF_NODES,
+
+    DK_ERROR_TABLE_RANGE,
+    DK_ERROR_TABLE_VALUE,
+    DK_ERROR_TABLE_ZERO,
+
+    DK_ERROR_VERIFY_DEC,
+    DK_ERROR_VERIFY_SIZE,
+    DK_ERROR_VERIFY_DATA,
+
+    DK_ERROR_INVALID,
+    DK_ERROR_LIMIT
+};
+
 struct FILE_STREAM {
     unsigned char *data;
     size_t length;
@@ -40,6 +105,6 @@ int    gbarle_decompress (struct COMPRESSOR*);
 int      gbarle_compress (struct COMPRESSOR*);
 int       gba_decompress (struct COMPRESSOR*);
 
-void dk_set_error (const char*);
+const char *dk_get_error (int);
 
 #endif

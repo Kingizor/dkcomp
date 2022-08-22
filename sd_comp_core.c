@@ -8,10 +8,8 @@
 /* decompressor */
 
 static int read_byte (struct COMPRESSOR *sd, size_t addr) {
-    if (addr >= sd->in.length) {
-        dk_set_error("Tried to read out of bounds.");
+    if (addr >= sd->in.length)
         return -1;
-    }
     return sd->in.data[addr];
 }
 static int read_word (struct COMPRESSOR *sd, size_t addr) {
@@ -27,8 +25,8 @@ static int read_bits (struct COMPRESSOR *sd, int count) {
     unsigned val = 0;
     while (count--) {
         unsigned char bit;
-        int v = read_byte(sd, sd->in.pos);
-        if (v < 0)
+        int v;
+        if ((v = read_byte(sd, sd->in.pos)) < 0)
             return -1;
         bit = !!(v & (1 << (sd->in.bitpos ^ 7)));
         val |= bit << count;
@@ -43,10 +41,8 @@ static int read_bits (struct COMPRESSOR *sd, int count) {
 /* modify word (all writes are rmw) */
 static int modify_word (struct COMPRESSOR *sd, size_t addr, int val) {
     addr <<= 1;
-    if (addr+1 >= sd->out.limit) {
-        dk_set_error("Attempted to write out of bounds.");
-        return -1;
-    }
+    if (addr+1 >= sd->out.limit)
+        return 1;
     sd->out.data[addr  ] |= val;
     sd->out.data[addr+1] |= val >> 8;
     return 0;
@@ -71,14 +67,13 @@ static int sub_decompress (struct COMPRESSOR *sd, int mode) {
 
     for (;;) {
         int loop, val, count;
-        if ((loop  = read_bits(sd, 1)) < 0)
-            return 1;
-        if ((val   = read_bits(sd, val_size)) < 0)
-            return 1;
+        if ((loop  = read_bits(sd, 1)) < 0
+        ||  (val   = read_bits(sd, val_size)) < 0)
+            return DK_ERROR_OOB_INPUT;
         val <<= shift;
         if (loop) {
             if ((count = read_bits(sd, count_size)) < 0)
-                return 1;
+                return DK_ERROR_OOB_INPUT;
         }
         else {
             count = 1;
@@ -87,7 +82,7 @@ static int sub_decompress (struct COMPRESSOR *sd, int mode) {
             break;
         while (count--)
             if (modify_word(sd, addr++, val))
-                return 1;
+                return DK_ERROR_OOB_OUTPUT_W;
     }
     return 0;
 }
@@ -98,37 +93,34 @@ static int  main_decompress (struct COMPRESSOR *sd) {
     size_t addr = 0;
 
     for (;;) {
-        unsigned char  mode = read_bits(sd,  2);
-        unsigned short val  = read_bits(sd, 10);
-        int count;
+        int mode, val, count;
+
+        if ((mode = read_bits(sd,  2)) < 0
+        ||  ( val = read_bits(sd, 10)) < 0)
+            return DK_ERROR_OOB_INPUT;
 
         if (!mode) { /* write single value once */
             count = 1;
         }
         else if (mode == 1) { /* write single value 1-63 times  */
             if ((count = read_bits(sd, 6)) < 0)
-                return 1;
+                return DK_ERROR_OOB_INPUT;
             if (!count) /* Quit if zero */
                 break;
         }
         else { /* write incrementing or decrementing value 1-15 times */
             if ((count = read_bits(sd, 4)) < 0)
-                return 1;
+                return DK_ERROR_OOB_INPUT;
 
             /* These cases don't have the exit condition,
                so the game would write 65536 values in succession */
-            if (!count) {
-                dk_set_error(
-                    "Encountered an exit condition in a case without "
-                    "an exit check."
-                );
-                return 1;
-            }
+            if (!count)
+                return DK_ERROR_SD_BAD_EXIT;
         }
 
         while (count--) {
             if (modify_word(sd, addr++, val))
-                return 1;
+                return DK_ERROR_OOB_OUTPUT_W;
             if (mode == 2)
                 val++;
             else if (mode == 3)
@@ -142,15 +134,16 @@ static int  main_decompress (struct COMPRESSOR *sd) {
 int sd_decompress (struct COMPRESSOR *sd) {
 
     int i, subs;
+    enum DK_ERROR e;
 
     /* first byte indicates which subs to call */
     if ((subs = read_byte(sd, sd->in.pos + 0)) < 0)
-        return 1;
+        return DK_ERROR_OOB_INPUT;
     subs &= 7;
 
     /* next word is the output size in words */
     if ((i = read_word(sd, sd->in.pos + 1)) < 0)
-        return 1;
+        return DK_ERROR_OOB_INPUT;
     sd->out.pos  = i << 1;
 
     sd->in.pos  += 3;
@@ -158,14 +151,13 @@ int sd_decompress (struct COMPRESSOR *sd) {
     /* first three subs are optional */
     for (i = 0; i < 3; i++)
         if (subs & (1 << i))
-            if (sub_decompress(sd, i)) /* {2,4,8}000 */
-                return 1;
+            if ((e = sub_decompress(sd, i))) /* {2,4,8}000 */
+                return e;
 
     /* fourth sub and the main routine are mandatory */
-    if (sub_decompress(sd, 3)) /* 1C00 */
-        return 1;
-    if (main_decompress(sd))   /* 03FF */
-        return 1;
+    if ((e = sub_decompress(sd, 3)) /* 1C00 */
+    ||  (e = main_decompress(sd)))  /* 03FF */
+        return e;
     return 0;
 }
 
@@ -195,11 +187,8 @@ static int write_bits (struct COMPRESSOR *sd, int count, unsigned val) {
             sd->out.pos++;
 
         /* don't go past the end of the buffer */
-        if (sd->out.pos >= sd->out.limit) {
-            dk_set_error("Attempted to write past end of buffer.");
-            return 1;
-        }
-
+        if (sd->out.pos >= sd->out.limit)
+            return DK_ERROR_OOB_OUTPUT_W;
     }
     return 0;
 }
@@ -220,14 +209,13 @@ static int encode_subs (
     unsigned char bit_val, /* which bits to process */
     size_t loop_limit
 ) {
+    enum DK_ERROR e;
     size_t i;
     int count; /* How many bits?            (6 or 4) */
     int shift; /* How many trailing zeroes? (1 or 3) */
-    {
-        unsigned char b;
-        for (b = bit_val, shift = 0; !(b & 1); shift++, b >>=    1);
-        for (b = bit_val, count = 0;        b; count++, b &= b - 1);
-    }
+    unsigned char b;
+    for (b = bit_val, shift = 0; !(b & 1); shift++, b >>=    1);
+    for (b = bit_val, count = 0;        b; count++, b &= b - 1);
 
     for (i = 1; i < sd->in.length;) {
         unsigned char word = sd->in.data[i] & bit_val; /* high byte only */
@@ -247,47 +235,48 @@ static int encode_subs (
         /* Sometimes it's better to have multiple singles than a loop */
         if ((j * (1 + count)) < 8) { /* Singles */
             while (j--)
-                if (write_bits(sd, 1 + count, val))
-                    return 1;
+                if ((e = write_bits(sd, 1 + count, val)))
+                    return e;
         }
         else {
             val = ((val | (1 << count)) << (7 - count)) | j;
-            if (write_bits(sd, 8, val))
-                return 1;
+            if ((e = write_bits(sd, 8, val)))
+                return e;
         }
 
     }
 
     /* Quit */
-    if (write_bits(sd, 8, 1 << 7))
-        return 1;
+    if ((e = write_bits(sd, 8, 1 << 7)))
+        return e;
 
     return 0;
 }
 
 static int encode_main (struct COMPRESSOR *sd) {
 
+    enum DK_ERROR e;
     size_t i;
     for (i = 0; i < sd->in.length;) {
 
         enum { UNIQUE, SAME, INC, DEC } mode = UNIQUE;
         int LC;
+        int w1;
 
         /* Read current word */
-        int w;
-        if ((w = read_word(sd, i)) < 0)
-            return 1;
-        unsigned short w1 = w & 0x3FF;
+        if ((w1 = read_word(sd, i)) < 0)
+            return DK_ERROR_OOB_INPUT;
+        w1 &= 0x3FF;
 
         if (i < sd->in.length-2) {
 
             size_t addr = i + 2;
-            int lim;
+            int lim,w2;
 
             /* Read next word */
-            if ((w = read_word(sd, addr)) < 0)
-                return 1;
-            unsigned short w2 = w & 0x3FF;
+            if ((w2 = read_word(sd, addr)) < 0)
+                return DK_ERROR_OOB_INPUT;
+            w2 &= 0x3FFF;
 
             /* Determine the pattern */
             signed short diff = w2 - w1;
@@ -300,13 +289,13 @@ static int encode_main (struct COMPRESSOR *sd) {
 
             /* How many future words match the pattern? */
             for (LC = 2; LC < lim; LC++) {
-                unsigned short w3;
+                int w3;
                 addr += 2;
                 if (addr >= sd->in.length)
                     break;
-                if ((w = read_word(sd, i)) < 0)
-                    return 1;
-                w3 = w & 0x3FF;
+                if ((w3 = read_word(sd, addr)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                w3 &= 0x3FF;
                 if ((w3 - w2) != diff)
                     break;
                 w2 = w3;
@@ -317,22 +306,22 @@ static int encode_main (struct COMPRESSOR *sd) {
         unsigned short val = (mode << 10) | w1;
 
         if (!mode) { /* Single */
-            if (write_bits(sd, 12, val))
-                return 1;
+            if ((e = write_bits(sd, 12, val)))
+                return e;
             i += 2;
         }
         else { /* Loop */
             int LS = (mode == 1) ? 6 : 4;
-            if (write_bits(sd, 12+LS, (val << LS) | LC))
-                return 1;
+            if ((e = write_bits(sd, 12+LS, (val << LS) | LC)))
+                return e;
             i += LC*2;
         }
         }
     }
 
     /* Quit */
-    if (write_bits(sd, 18, 1 << 16))
-        return 1;
+    if ((e = write_bits(sd, 18, 1 << 16)))
+        return e;
 
     return 0;
 }
@@ -340,6 +329,7 @@ static int encode_main (struct COMPRESSOR *sd) {
 int sd_compress (struct COMPRESSOR *sd) {
 
     int i;
+    enum DK_ERROR e;
 
     /* output size (i.e. word count) */
     sd->out.data[2] = sd->in.length >> 9;
@@ -351,18 +341,19 @@ int sd_compress (struct COMPRESSOR *sd) {
         if (bits_active(sd, 0x20 << i)) {
             sd->out.data[0] |= 1 << i;
             if (encode_subs(sd, 0x20 << i, 63))
-                return 1;
+                return DK_ERROR_OOB_OUTPUT_W;
         }
     }
 
     /* the fourth subroutine is mandatory (1C00) */
-    encode_subs(sd, 0x1C, 15);
+    if (encode_subs(sd, 0x1C, 15))
+        return DK_ERROR_OOB_OUTPUT_W;
 
     /* The main loop (03FF) */
-    if (encode_main(sd))
-        return 1;
+    if ((e = encode_main(sd)))
+        return e;
 
-    if (sd->out.bitpos)
+    if (sd->out.bitpos && sd->out.pos < sd->out.limit)
         sd->out.pos++;
     return 0;
 }

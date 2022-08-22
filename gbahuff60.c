@@ -26,10 +26,8 @@ struct BIN {
 
 static int read_bit (struct COMPRESSOR *dk) {
     int v;
-    if (dk->in.pos >= dk->in.length) {
-        dk_set_error("Tried to read out of bounds.");
+    if (dk->in.pos >= dk->in.length)
         return -1;
-    }
     v = (dk->in.data[dk->in.pos] >> dk->in.bitpos++) & 1;
     if (dk->in.bitpos == 8) {
         dk->in.bitpos  = 0;
@@ -39,10 +37,8 @@ static int read_bit (struct COMPRESSOR *dk) {
 }
 
 static int write_byte (struct COMPRESSOR *dk, unsigned char out) {
-    if (dk->out.pos >= dk->out.limit) {
-        dk_set_error("Tried to write out of bounds.");
+    if (dk->out.pos >= dk->out.limit)
         return -1;
-    }
     dk->out.data[dk->out.pos++] = out;
     return 0;
 }
@@ -176,7 +172,7 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
             switch (read_bit(dk)) {
                 case 0: { node = tree[node].dir.L; break; }
                 case 1: { node = tree[node].dir.R; break; }
-               default: { return 1; }
+               default: { return DK_ERROR_OOB_INPUT; }
             }
         }
 
@@ -187,9 +183,9 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
             case 0x101: {
                 int i;
                 for (i = 0; i < 8; i++) {
-                    int bit = read_bit(dk);
-                    if (bit < 0)
-                        return 1;
+                    int bit;
+                    if ((bit = read_bit(dk)) < 0)
+                        return DK_ERROR_OOB_INPUT;
                     out <<= 1;
                     out |= bit;
                 }
@@ -201,7 +197,7 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
         if (quit)
             break;
         if (write_byte(dk, out))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
         if (tree->weight >= 0x8000)
             rebuild_tree(&bin, node_count);
 
@@ -220,10 +216,8 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
 static int write_bit (struct COMPRESSOR *dk, unsigned char val) {
     size_t addr = dk->out.pos + dk->out.bytepos;
     unsigned bit = dk->out.bitpos++;
-    if (addr >= dk->out.limit) {
-        dk_set_error("Tried to write out of bounds (output)");
+    if (addr >= dk->out.limit)
         return 1;
-    }
     dk->out.data[addr] &= ~(1 << bit);
     dk->out.data[addr] |= val << bit;
     if (dk->out.bitpos == 8) {
@@ -260,7 +254,7 @@ static int encode_leaf (struct BIN *bin, struct NODE *n) {
         int bit = !!(sequence & 1);
         sequence >>= 1;
         if (write_bit(bin->dk, bit))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
     }
     return 0;
 }
@@ -274,6 +268,7 @@ int gbahuff60_compress (struct COMPRESSOR *dk) {
     };
     int node_count = 3;
     struct BIN bin = { dk, tree };
+    enum DK_ERROR e;
 
     while (dk->in.pos < dk->in.length) {
         int  val = dk->in.data[dk->in.pos++];
@@ -282,21 +277,21 @@ int gbahuff60_compress (struct COMPRESSOR *dk) {
             int i;
 
             /* send the new leaf command */
-            if (encode_leaf(&bin, &tree[nsearch(tree, node_count, 0x101)]))
-                return 1;
+            if ((e = encode_leaf(&bin, &tree[nsearch(tree, node_count, 0x101)])))
+                return e;
 
             /* write the value */
             for (i = 0; i < 8; i++)
                 if (write_bit(dk, (val >> (7^i)) & 1))
-                    return 1;
+                    return DK_ERROR_OOB_OUTPUT_W;
 
             /* add the leaf to the tree */
             node = add_leaf(&bin, node_count, val);
             node_count += 2;
         }
         else { /* use the existing leaf */
-            if (encode_leaf(&bin, &tree[node]))
-                return 1;
+            if ((e = encode_leaf(&bin, &tree[node])))
+                return e;
         }
         if (tree->weight >= 0x8000)
             rebuild_tree(&bin, node_count);
@@ -304,15 +299,13 @@ int gbahuff60_compress (struct COMPRESSOR *dk) {
     }
 
     /* quit */
-    if (encode_leaf(&bin, &tree[nsearch(tree, node_count, 0x100)]))
-        return 1;
+    if ((e = encode_leaf(&bin, &tree[nsearch(tree, node_count, 0x100)])))
+        return e;
 
     /* excess */
     if (dk->out.bitpos || dk->out.bytepos) {
-        if ((dk->out.pos+1) > dk->out.limit) {
-            dk_set_error("Tried to write out of bounds");
-            return 1;
-        }
+        if ((dk->out.pos+1) > dk->out.limit)
+            return DK_ERROR_OOB_OUTPUT_W;
         dk->out.pos++;
     }
     return 0;

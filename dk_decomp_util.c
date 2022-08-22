@@ -34,7 +34,7 @@ int main (int argc, char *argv[]) {
     } formats[] = {
         {        BD_COMP, "SNES DKC2/DKC3 Big Data"    },
         {        SD_COMP, "SNES DKC3 Small Data"       },
-        {    DKCCHR_COMP, "SNES DKC Tileset"           },
+        {    DKCCHR_COMP, "SNES DKC Tilesets"          },
         {    DKCGBC_COMP, " GBC DKC Tilemaps"          },
         {       DKL_COMP, " GB  DKL/DKL2/DKL3 Tilemaps"},
         {  GBA_LZ77_COMP, " GBA BIOS LZ77 (10)"        },
@@ -45,7 +45,7 @@ int main (int argc, char *argv[]) {
         {       GBA_COMP, " GBA BIOS Auto-Detect"      }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
-    int i, format = 0;
+    int e, i, format = 0;
     size_t offset;
 
     if (argc != 5) {
@@ -64,8 +64,8 @@ int main (int argc, char *argv[]) {
 
     offset = strtol(argv[4], NULL, 0);
 
-    if (dk_decompress_file_to_file(formats[format].id, argv[2], argv[3], offset)) {
-        fprintf(stderr, "Error: %s.\n", dk_get_error());
+    if ((e = dk_decompress_file_to_file(formats[format].id, argv[2], argv[3], offset))) {
+        fprintf(stderr, "Error: %s.\n", dk_get_error(e));
         return 1;
     }
 

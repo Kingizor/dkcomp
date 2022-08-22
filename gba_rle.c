@@ -6,17 +6,13 @@
 #include "dk_internal.h"
 
 static int read_byte (struct COMPRESSOR *gba) {
-    if (gba->in.pos >= gba->in.length) {
-        dk_set_error("Tried to read past end of input");
+    if (gba->in.pos >= gba->in.length)
         return -1;
-    }
     return gba->in.data[gba->in.pos++];
 }
 static int write_byte (struct COMPRESSOR *gba, unsigned char v) {
-    if (gba->out.pos >= gba->out.limit) {
-        dk_set_error("Tried to write out of bounds");
+    if (gba->out.pos >= gba->out.limit)
         return 1;
-    }
     gba->out.data[gba->out.pos++] = v;
     return 0;
 }
@@ -24,35 +20,36 @@ static int write_byte (struct COMPRESSOR *gba, unsigned char v) {
 int gbarle_decompress (struct COMPRESSOR *gba) {
     size_t output_size;
 
-    if (gba->in.length < 5) {
-        dk_set_error("Data too short for RLE");
-        return 1;
-    }
-    if ((gba->in.data[0] & 0xF0) != 0x30) {
-        dk_set_error("Incorrect identifier for RLE");
-        return 1;
-    }
+    if (gba->in.length < 5)
+        return DK_ERROR_INPUT_SMALL;
+
+    if ((gba->in.data[0] & 0xF0) != 0x30)
+        return DK_ERROR_SIG_WRONG;
+
     output_size = (gba->in.data[3] << 16) | gba->in.data[1]
                 | (gba->in.data[2] <<  8);
     gba->in.pos += 4;
 
     while (gba->out.pos < output_size) {
-        int i, count, v = read_byte(gba);
-        if (v < 0) return 1;
+        int i, count, v;
+        if ((v = read_byte(gba)) < 0)
+            return DK_ERROR_OOB_INPUT;
         count = v & 0x7F;
         if (v & 0x80) {
             count += 3;
-            v = read_byte(gba);
+            if ((v = read_byte(gba)) < 0)
+                return DK_ERROR_OOB_INPUT;
             for (i = 0; i < count; i++)
                 if (write_byte(gba, v))
-                    return 1;
+                    return DK_ERROR_OOB_OUTPUT_W;
         }
         else {
             count += 1;
             for (i = 0; i < count; i++) {
-                v = read_byte(gba);
-                if (v < 0 || write_byte(gba, v))
-                    return 1;
+                if ((v = read_byte(gba)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                if (write_byte(gba, v))
+                    return DK_ERROR_OOB_OUTPUT_W;
             }
         }
     }
@@ -73,17 +70,15 @@ int gbarle_compress (struct COMPRESSOR *gba) {
     struct PATH *step = NULL, *prev = NULL;
     size_t i;
 
-    if (steps == NULL) {
-        dk_set_error("Failed to allocate memory for path");
-        return 1;
-    }
+    if (steps == NULL)
+        return DK_ERROR_ALLOC;
 
     /* write header */
     if (write_byte(gba, 0x30)
     ||  write_byte(gba, gba->in.length)
     ||  write_byte(gba, gba->in.length >>  8)
     ||  write_byte(gba, gba->in.length >> 16))
-        goto error;
+        goto write_error;
 
     /* happy defaults */
     for (i = 0; i < gba->in.length+1; i++) {
@@ -147,17 +142,17 @@ int gbarle_compress (struct COMPRESSOR *gba) {
 
         /* control byte */
         if (write_byte(gba, count | (type << 7)))
-            goto error;
+            goto write_error;
 
         /* data bytes */
         if (type) {
             if (write_byte(gba, *data))
-                goto error;
+                goto write_error;
         }
         else {
             for (i = 0; i < count+1u; i++) {
                 if (write_byte(gba, *data++))
-                    goto error;
+                    goto write_error;
             }
         }
         step = next;
@@ -165,8 +160,8 @@ int gbarle_compress (struct COMPRESSOR *gba) {
 
     free(steps);
     return 0;
-error:
+write_error:
     free(steps);
-    return 1;
+    return DK_ERROR_OOB_OUTPUT_W;
 }
 

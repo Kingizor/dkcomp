@@ -8,24 +8,18 @@
 /* (format is similar to the DKC SNES tileset format) */
 
 static int read_byte (struct COMPRESSOR *gbc) {
-    if (gbc->in.pos >= gbc->in.length) {
-        dk_set_error("Input: Tried to read out of bounds.\n");
+    if (gbc->in.pos >= gbc->in.length)
         return -1;
-    }
     return gbc->in.data[gbc->in.pos++];
 }
 static int read_out (struct COMPRESSOR *gbc, size_t addr) {
-    if (addr >= gbc->out.pos) {
-        dk_set_error("Output: Tried to read out of bounds.\n");
+    if (addr >= gbc->out.pos)
         return -1;
-    }
     return gbc->out.data[gbc->out.pos - addr];
 }
 static int write_byte (struct COMPRESSOR *gbc, unsigned char val) {
-    if (gbc->out.pos >= gbc->out.limit) {
-        dk_set_error("Output: Tried writing out of bounds.\n");
+    if (gbc->out.pos >= gbc->out.limit)
         return -1;
-    }
     gbc->out.data[gbc->out.pos++] = val;
     return 0;
 }
@@ -38,35 +32,38 @@ int dkcgbc_decompress (struct COMPRESSOR *gbc) {
         switch (n >> 6) {
             default: { /* Single byte, 1-127 times */
                 if ((v = read_byte(gbc)) < 0)
-                    return 2;
+                    return DK_ERROR_OOB_INPUT;
                 while (n--)
                     if (write_byte(gbc, v))
-                        return 2;
+                        return DK_ERROR_OOB_OUTPUT_W;
                 break;
             }
             case 2: { /* 1-63 bytes from input */
                 n &= 0x3F;
-                while (n--)
-                    if ((v = read_byte(gbc)) < 0
-                    ||      write_byte(gbc, v))
-                        return 2;
+                while (n--) {
+                    if ((v = read_byte(gbc)) < 0)
+                        return DK_ERROR_OOB_INPUT;
+                    if (write_byte(gbc, v))
+                        return DK_ERROR_OOB_OUTPUT_W;
+                }
                 break;
             }
             case 3: { /* 1-63 bytes from output */
-                int pos = read_byte(gbc);
-                if (pos < 0)
-                    return 2;
+                int pos;
+                if ((pos = read_byte(gbc)) < 0)
+                    return DK_ERROR_OOB_INPUT;
                 n &= 0x3F;
                 while (n--) {
-                    if ((v = read_out(gbc, pos)) < 0
-                    ||     write_byte(gbc, v))
-                        return 2;
+                    if ((v = read_out(gbc, pos)) < 0)
+                        return DK_ERROR_OOB_OUTPUT_R;
+                    if (write_byte(gbc, v))
+                        return DK_ERROR_OOB_OUTPUT_W;
                 }
                 break;
             }
         }
     }
-    return n < 0;
+    return (n < 0) ? DK_ERROR_OOB_INPUT : 0;
 }
 
 
@@ -213,29 +210,32 @@ static int write_data (struct BIN *bin) {
 
         /* control byte */
         if (write_byte(gbc, (nc->mode << 6) | nc->count))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
 
         /* data bytes */
         switch (nc->mode) {
             case 0:
             case 1: { /* RLE */
-                if ((v = read_byte(gbc)) < 0
-                ||      write_byte(gbc, v))
-                    return 1;
+                if ((v = read_byte(gbc)) < 0)
+                    return DK_ERROR_OOB_INPUT;
+                if (write_byte(gbc, v))
+                    return DK_ERROR_OOB_OUTPUT_W;
                 gbc->in.pos += 64*nc->mode + nc->count - 1;
                 break;
             }
             case 2: { /* copy input */
-                for (i = 0; i < nc->count; i++)
-                    if ((v = read_byte(gbc)) < 0
-                    ||      write_byte(gbc, v))
-                        return 1;
+                for (i = 0; i < nc->count; i++) {
+                    if ((v = read_byte(gbc)) < 0)
+                        return DK_ERROR_OOB_INPUT;
+                    if (write_byte(gbc, v))
+                        return DK_ERROR_OOB_OUTPUT_W;
+                }
                 break;
             }
             case 3: { /* copy output */
                 gbc->in.pos += nc->count;
                 if (write_byte(gbc, nc->addr))
-                    return 1;
+                    return DK_ERROR_OOB_OUTPUT_W;
                 break;
             }
         }
@@ -244,7 +244,7 @@ static int write_data (struct BIN *bin) {
 
     /* terminating byte */
     if (write_byte(gbc, 0))
-        return 1;
+        return DK_ERROR_OOB_OUTPUT_W;
 
     return 0;
 }
@@ -255,11 +255,10 @@ int dkcgbc_compress (struct COMPRESSOR *gbc) {
     struct PATH *steps = malloc(sizeof(struct PATH) * (gbc->in.length+1));
     struct BIN bin = { gbc, steps };
     size_t i;
+    enum DK_ERROR e;
 
-    if (steps == NULL) {
-        dk_set_error("Failed to allocate memory for path");
-        return 1;
-    }
+    if (steps == NULL)
+        return DK_ERROR_ALLOC;
 
     /* happy defaults! */
     for (i = 0; i <= gbc->in.length; i++) {
@@ -287,12 +286,9 @@ int dkcgbc_compress (struct COMPRESSOR *gbc) {
         step = step->link;
     }
 
-    if (write_data(&bin)) {
-        free(steps);
-        return 1;
-    }
+    e = write_data(&bin);
 
     free(steps);
-    return 0;
+    return e;
 }
 

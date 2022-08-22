@@ -6,18 +6,14 @@
 #include "dk_internal.h"
 
 static int read_byte (struct COMPRESSOR *gba) {
-    if (gba->in.pos >= gba->in.length) {
-        dk_set_error("Tried to read out of bounds (input)");
+    if (gba->in.pos >= gba->in.length)
         return -1;
-    }
     return gba->in.data[gba->in.pos++];
 }
 
 static int write_byte (struct COMPRESSOR *gba, unsigned char v) {
-    if (gba->out.pos >= gba->out.limit) {
-        dk_set_error("Tried to write out of bounds");
+    if (gba->out.pos >= gba->out.limit)
         return 1;
-    }
     gba->out.data[gba->out.pos++] = v;
     return 0;
 }
@@ -25,42 +21,41 @@ static int write_byte (struct COMPRESSOR *gba, unsigned char v) {
 int gbalz77_decompress (struct COMPRESSOR *gba) {
     size_t output_size;
 
-    if (gba->in.length < 5) {
-        dk_set_error("Data too short for LZ77");
-        return 1;
-    }
-    if ((gba->in.data[0] & 0xF0) != 0x10) {
-        dk_set_error("Incorrect identifier for LZ77");
-        return 1;
-    }
+    if (gba->in.length < 5)
+        return DK_ERROR_INPUT_SMALL;
+
+    if ((gba->in.data[0] & 0xF0) != 0x10)
+        return DK_ERROR_SIG_WRONG;
+
     output_size = (gba->in.data[3] << 16) | gba->in.data[1]
                 | (gba->in.data[2] <<  8);
     gba->in.pos += 4;
 
     while (gba->out.pos < output_size) {
-        unsigned char blocks = read_byte(gba);
-        int i;
+        int blocks, i;
+        if ((blocks = read_byte(gba)) < 0)
+            return DK_ERROR_OOB_INPUT;
         for (i = 0; i < 8; i++) {
-            int v1 = read_byte(gba);
-            if (v1 < 0) return 1;
+            int v1;
+            if ((v1  = read_byte(gba)) < 0)
+                return DK_ERROR_OOB_INPUT;
             if (blocks & (1 << (7^i))) {
                 unsigned short count, outpos;
-                int v2 = read_byte(gba);
-                if (v2 < 0) return 1;
+                int v2;
+                if ((v2 = read_byte(gba)) < 0)
+                    return DK_ERROR_OOB_INPUT;
                 count  =  (v1 >> 4) + 3;
                 outpos = ((v1 & 15) << 8) | v2;
-                if (outpos > gba->out.pos-1) {
-                    dk_set_error("LZ77: Invalid history offset");
-                    return 1;
-                }
+                if (outpos > gba->out.pos-1)
+                    return DK_ERROR_LZ77_HIST;
                 while (count--) {
                     if (write_byte(gba, gba->out.data[gba->out.pos-outpos-1]))
-                        return 1;
+                        return DK_ERROR_OOB_OUTPUT_W;
                 }
             }
             else {
                 if (write_byte(gba, v1))
-                    return 1;
+                    return DK_ERROR_OOB_OUTPUT_W;
             }
             if (gba->out.pos == output_size)
                 break;
@@ -84,17 +79,15 @@ int gbalz77_compress (struct COMPRESSOR *gba) {
     struct PATH *step = NULL, *prev = NULL;
     size_t i;
 
-    if (steps == NULL) {
-        dk_set_error("Failed to allocate memory for path");
-        return 1;
-    }
+    if (steps == NULL)
+        return DK_ERROR_ALLOC;
 
     /* write header */
     if (write_byte(gba, 0x10)
     ||  write_byte(gba, gba->in.length)
     ||  write_byte(gba, gba->in.length >>  8)
     ||  write_byte(gba, gba->in.length >> 16))
-        goto error;
+        goto write_error;
 
     /* happy defaults */
     for (i = 0; i < gba->in.length+1; i++) {
@@ -188,28 +181,28 @@ int gbalz77_compress (struct COMPRESSOR *gba) {
             node = next;
         }
         if (write_byte(gba, block << (8 - blockc)))
-            goto error;
+            goto write_error;
 
         /* write the blocks */
         while (blockc--) {
             struct PATH *next = step->link;
             if ((next - step) == 1) { /* default case */
                 if (write_byte(gba, gba->in.data[step-steps]))
-                    goto error;
+                    goto write_error;
             }
             else { /* history case */
                 struct NCASE *nc = &next->ncase;
                 if (write_byte(gba, (nc->offset >> 8) | (nc->count << 4))
                 ||  write_byte(gba,  nc->offset))
-                    goto error;
+                    goto write_error;
             }
             step = next;
         }
     }
     free(steps);
     return 0;
-error:
+write_error:
     free(steps);
-    return 1;
+    return DK_ERROR_OOB_OUTPUT_W;
 }
 

@@ -15,25 +15,12 @@
 #define VERIFY_DATA 0
 
 
-/* Error reporting functions */
-static const char *dk_error_msg = "";
-
-const char *dk_get_error (void) {
-    return dk_error_msg;
-}
-void dk_set_error (const char *error) {
-    dk_error_msg = error;
-}
-
-
 
 /* File/Buffer handling */
 
 static int check_input_mem (unsigned char *input) {
-    if (input == NULL) {
-        dk_set_error("Input pointer is NULL.");
-        return 1;
-    }
+    if (input == NULL)
+        return DK_ERROR_NULL_INPUT;
     return 0;
 }
 
@@ -41,94 +28,69 @@ static int open_input_file (
     const char *fn,
     unsigned char **input,
     size_t *input_size,
-    int ofs,
+    size_t ofs,
     int mode_comp
 ) {
     FILE *f;
     long input_length;
 
     f = fopen(fn, "rb");
-    if (f == NULL) {
-        dk_set_error("Failed to open input file.");
-        return 1;
-    }
+    if (f == NULL)
+        return DK_ERROR_FILE_INPUT;
 
     if ((fseek(f, 0,   SEEK_END)  == -1)
     || ((input_length = ftell(f)) == -1)
     ||  (fseek(f, ofs, SEEK_SET)  == -1)) {
-        dk_set_error("Failed to seek the input file.");
-        goto error;
+        fclose(f);
+        return DK_ERROR_SEEK_INPUT;
     }
 
-    if (input_length <= ofs) {
-        dk_set_error("File ofs is larger than the input file.");
-        goto error;
+    if ((long)ofs < 0) {
+        fclose(f);
+        return DK_ERROR_OFFSET_NEG;
     }
 
-    if (mode_comp) {
-        *input_size = input_length;
-    }
-    else {
-        if (ofs > input_length) {
-            dk_set_error("Supplied decompression offset is larger than the input size.");
-            goto error;
-        }
-        if (ofs < 0) {
-            dk_set_error("Supplied decompresison offset is negative.");
-            goto error;
-        }
-        *input_size = input_length - ofs;
-        if (*input_size > 0x20028) {
-            *input_size = 0x20028;
-        }
-        if (*input_size < 0x28) {
-            dk_set_error("File size minus offset is too small.");
-        }
+    *input_size = input_length;
+
+    if (ofs >= *input_size) {
+        fclose(f);
+        return DK_ERROR_OFFSET_BIG;
     }
 
-    *input = malloc(*input_size);
+    if (!mode_comp)
+        *input_size -= ofs;
+
+    *input = calloc(*input_size, 1);
     if (*input == NULL) {
-        dk_set_error("Failed to allocate memory for input buffer.");
-        goto error;
+        fclose(f);
+        return DK_ERROR_ALLOC;
     }
 
     if (fread(*input, 1, *input_size, f) != (size_t)*input_size) {
-        dk_set_error("Failed to read from input file.");
-        free(*input);
-        goto error;
+        free(*input); *input = NULL;
+        fclose(f);
+        return DK_ERROR_FREAD;
     }
     return 0;
-error:
-    if (f != NULL)
-        fclose(f);
-    return 1;
 }
 
 static int write_output_file (const char *fn, unsigned char *output, size_t output_size) {
-
     FILE *f;
-
     f = fopen(fn, "wb");
-    if (f == NULL) {
-        dk_set_error("Failed to open file for writing.");
-        return 1;
-    }
+    if (f == NULL)
+        return DK_ERROR_FILE_OUTPUT;
 
     if (fwrite(output, 1, output_size, f) != output_size) {
-        dk_set_error("An error occurred while writing the output file.");
         fclose(f);
-        return 1;
+        return DK_ERROR_FWRITE;
     }
-
     fclose(f);
     return 0;
 }
 static int open_output_buffer (unsigned char **output, size_t output_size) {
     *output = calloc(output_size, 1);
-    if (*output == NULL) {
-        dk_set_error("Failed to allocate memory for output buffer.");
-        return 1;
-    }
+    if (*output == NULL)
+        return DK_ERROR_ALLOC;
     return 0;
 }
 
@@ -138,23 +100,18 @@ static int open_output_buffer (unsigned char **output, size_t output_size) {
 static int verify_data (enum DK_FORMAT comp_type, struct COMPRESSOR *cmp) {
     unsigned char *data = NULL;
     size_t size = 0;
-    if (dk_decompress_mem_to_mem(comp_type, &data, &size, cmp->out.data, cmp->out.pos)) {
-        dk_set_error("Failed to decompress compressed data (corruption)");
-        goto error;
-    }
+    if (dk_decompress_mem_to_mem(comp_type, &data, &size, cmp->out.data, cmp->out.pos))
+        return DK_ERROR_VERIFY_DEC;
     if (size != cmp->in.length) {
-        dk_set_error("Decompressed size doesn't match the original data");
-        goto error;
+        free(data);
+        return DK_ERROR_VERIFY_SIZE;
     }
     if (memcmp(data, cmp->in.data, size)) {
-        dk_set_error("Decompressed data doesn't match the original data");
-        goto error;
+        free(data);
+        return DK_ERROR_VERIFY_DATA;
     }
     free(data);
     return 0;
-error:
-    free(data);
-    return 1;
 }
 #endif
 
@@ -187,18 +144,16 @@ static const struct COMP_TYPE comp_table[] = {
 
 
 /* Check whether a (de)compressor is supported */
-const struct COMP_TYPE *get_compressor (int index, int type) {
+static int get_compressor (int index, int type, const struct COMP_TYPE **comp) {
     if (index < 0
     ||  index >= COMP_LIMIT
     ||  ( type && comp_table[index].  comp == NULL)
     ||  (         comp_table[index].decomp == NULL)) {
-        if (type)
-            dk_set_error("Unsupported compression type.\n");
-        else
-            dk_set_error("Unsupported decompression type.\n");
-        return NULL;
+        return type ? DK_ERROR_COMP_NOT
+                    : DK_ERROR_DECOMP_NOT;
     }
-    return &comp_table[index];
+    *comp = &comp_table[index];
+    return 0;
 }
 
 
@@ -206,111 +161,107 @@ const struct COMP_TYPE *get_compressor (int index, int type) {
 
 /* Compression handlers */
 
-int dk_compress_mem_to_mem (
+SHARED int dk_compress_mem_to_mem (
     enum DK_FORMAT comp_type,
     unsigned char **output,
     size_t *output_size,
     unsigned char *input,
     size_t input_size
 ) {
-    const struct COMP_TYPE *dk_compress = get_compressor(comp_type, 1);
+    enum DK_ERROR e;
+    const struct COMP_TYPE *dk_compress;
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
 
-    if (dk_compress == NULL)
-        return 1;
-    if (check_input_mem(input))
-        return 1;
+    if ((e = get_compressor(comp_type, 1, &dk_compress))
+    ||  (e = check_input_mem(input)))
+        goto error;
 
     cmp.in.data   = input;
     cmp.in.length = input_size;
     cmp.out.limit = 1 << dk_compress->size_limit;
 
-    if (open_output_buffer(&cmp.out.data, cmp.out.limit))
-        return 1;
-    if (dk_compress->comp(&cmp)) {
-        free(cmp.out.data);
-        return 1;
-    }
+    if ((e = open_output_buffer(&cmp.out.data, cmp.out.limit))
+    ||  (e = dk_compress->comp(&cmp)))
+        goto error;
 #if VERIFY_DATA
-    if (verify_data(comp_type, &cmp)) {
-        free(cmp.out.data);
-        return 1;
-    }
+    if ((e = verify_data(comp_type, &cmp)))
+        goto error;
 #endif
 
     *output      = cmp.out.data;
     *output_size = cmp.out.pos;
     return 0;
+error:
+    free(cmp.out.data); cmp.out.data = NULL;
+    return e;
 }
 
-int dk_compress_file_to_mem (
+SHARED int dk_compress_file_to_mem (
     enum DK_FORMAT comp_type,
     unsigned char **output,
     size_t *output_size,
     const char *file_in
 ) {
-    const struct COMP_TYPE *dk_compress = get_compressor(comp_type, 1);
+    enum DK_ERROR e;
+    const struct COMP_TYPE *dk_compress;
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
 
-    if (dk_compress == NULL)
-        return 1;
-    if (open_input_file(file_in, &cmp.in.data, &cmp.in.length, 0, 1))
+    if ((e = get_compressor(comp_type, 1, &dk_compress))
+    ||  (e = open_input_file(file_in, &cmp.in.data, &cmp.in.length, 0, 1)))
         goto error;
     cmp.out.limit = 1 << dk_compress->size_limit;
-    if (open_output_buffer(&cmp.out.data, cmp.out.limit))
-        goto error;
-    if (dk_compress->comp(&cmp))
+    if ((e = open_output_buffer(&cmp.out.data, cmp.out.limit))
+    ||  (e = dk_compress->comp(&cmp)))
         goto error;
 #if VERIFY_DATA
-    if (verify_data(comp_type, &cmp))
+    if (e = verify_data(comp_type, &cmp))
         goto error;
 #endif
 
-    free(cmp.in.data);
+    free(cmp.in.data); cmp.in.data = NULL;
     *output      = cmp.out.data;
     *output_size = cmp.out.pos;
     return 0;
 error:
-    free(cmp.in.data);
-    free(cmp.out.data);
-    return 1;
+    free(cmp. in.data); cmp. in.data = NULL;
+    free(cmp.out.data); cmp.out.data = NULL;
+    return e;
 }
 
-
-int dk_compress_mem_to_file (
+SHARED int dk_compress_mem_to_file (
     enum DK_FORMAT comp_type,
     const char *file_out,
     unsigned char *input,
     size_t input_size
 ) {
-    unsigned char *output;
+    unsigned char *output = NULL;
     size_t output_size;
+    enum DK_ERROR e;
 
-    if (dk_compress_mem_to_mem(comp_type, &output, &output_size, input, input_size))
-        return 1;
-    if (write_output_file(file_out, output, output_size)) {
+    if ((e = dk_compress_mem_to_mem(comp_type, &output, &output_size, input, input_size))
+    ||  (e = write_output_file(file_out, output, output_size))) {
         free(output);
-        return 1;
+        return e;
     }
     free(output);
     return 0;
 }
 
-int dk_compress_file_to_file (
+SHARED int dk_compress_file_to_file (
     enum DK_FORMAT comp_type,
     const char *file_out,
     const char *file_in
 ) {
-    unsigned char *output;
+    unsigned char *output = NULL;
     size_t output_size;
+    enum DK_ERROR e;
 
-    if (dk_compress_file_to_mem(comp_type, &output, &output_size, file_in))
-        return 1;
-    if (write_output_file(file_out, output, output_size)) {
+    if ((e = dk_compress_file_to_mem(comp_type, &output, &output_size, file_in))
+    ||  (e = write_output_file(file_out, output, output_size))) {
         free(output);
-        return 1;
+        return e;
     }
     free(output);
     return 0;
@@ -322,103 +273,104 @@ int dk_compress_file_to_file (
 
 /* Decompression handlers */
 
-int dk_decompress_mem_to_mem (
+SHARED int dk_decompress_mem_to_mem (
     enum DK_FORMAT decomp_type,
     unsigned char **output,
     size_t *output_size,
     unsigned char *input,
     size_t input_size
 ) {
-    const struct COMP_TYPE *dk_decompress = get_compressor(decomp_type, 0);
+    enum DK_ERROR e;
+    const struct COMP_TYPE *dk_decompress;
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
 
-    if (dk_decompress == NULL)
-        return 1;
-    if (check_input_mem(input))
-        return 1;
+    if ((e = get_compressor(decomp_type, 0, &dk_decompress))
+    ||  (e = check_input_mem(input)))
+        goto error;
 
     dc.in.data   = input;
     dc.in.length = input_size;
     dc.out.limit = 1 << dk_decompress->size_limit;
 
-    if (open_output_buffer(&dc.out.data, dc.out.limit))
-        return 1;
-
-    if (dk_decompress->decomp(&dc)) {
-        free(dc.out.data);
-        return 1;
-    }
+    if ((e = open_output_buffer(&dc.out.data, dc.out.limit))
+    ||  (e = dk_decompress->decomp(&dc)))
+        goto error;
     *output      = dc.out.data;
     *output_size = dc.out.pos;
     return 0;
+error:
+    free(dc.out.data); dc.out.data = NULL;
+    return e;
 }
-int dk_decompress_file_to_mem (
+
+SHARED int dk_decompress_file_to_mem (
     enum DK_FORMAT decomp_type,
     unsigned char **output,
     size_t *output_size,
     const char *file_in,
     size_t position
 ) {
-    const struct COMP_TYPE *dk_decompress = get_compressor(decomp_type, 0);
+    enum DK_ERROR e;
+    const struct COMP_TYPE *dk_decompress;
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
 
-    if (dk_decompress == NULL)
-        return 1;
-    if (open_input_file(file_in, &dc.in.data, &dc.in.length, position, 0))
-        goto error;
-    dc.out.limit = 1 << dk_decompress->size_limit;
-    if (open_output_buffer(&dc.out.data, dc.out.limit))
-        goto error;
-    if (dk_decompress->decomp(&dc))
+    if ((e = get_compressor(decomp_type, 0, &dk_decompress))
+    ||  (e = open_input_file(file_in, &dc.in.data, &dc.in.length, position, 0)))
         goto error;
 
-    free(dc.in.data);
+    dc.out.limit = 1 << dk_decompress->size_limit;
+
+    if ((e = open_output_buffer(&dc.out.data, dc.out.limit))
+    ||  (e = dk_decompress->decomp(&dc)))
+        goto error;
+
+    free(dc.in.data); dc.in.data = NULL;
     *output      = dc.out.data;
     *output_size = dc.out.pos;
     return 0;
 error:
-    free(dc.in.data);
-    free(dc.out.data);
-    return 1;
+    free(dc.in.data);  dc. in.data = NULL;
+    free(dc.out.data); dc.out.data = NULL;
+    return e;
 }
 
-int dk_decompress_mem_to_file (
+SHARED int dk_decompress_mem_to_file (
     enum DK_FORMAT decomp_type,
     const char *file_out,
     unsigned char *input,
     size_t input_size
 ) {
-    unsigned char *output;
+    unsigned char *output = NULL;
     size_t output_size;
+    enum DK_ERROR e;
 
-    if (dk_decompress_mem_to_mem(decomp_type, &output, &output_size, input, input_size))
-        return 1;
-    if (write_output_file(file_out, output, output_size)) {
+    if ((e = dk_decompress_mem_to_mem(decomp_type, &output, &output_size, input, input_size))
+    ||  (e = write_output_file(file_out, output, output_size))) {
         free(output);
-        return 1;
+        return e;
     }
     free(output);
     return 0;
 }
-int dk_decompress_file_to_file (
+
+SHARED int dk_decompress_file_to_file (
     enum DK_FORMAT decomp_type,
     const char *file_out,
     const char *file_in,
     size_t position
 ) {
-    unsigned char *output;
+    unsigned char *output = NULL;
     size_t output_size;
+    enum DK_ERROR e;
 
-    if (dk_decompress_file_to_mem(decomp_type, &output, &output_size, file_in, position))
-        return 1;
-    if (write_output_file(file_out, output, output_size)) {
+    if ((e = dk_decompress_file_to_mem(decomp_type, &output, &output_size, file_in, position))
+    ||  (e = write_output_file(file_out, output, output_size))) {
         free(output);
-        return 1;
+        return e;
     }
     free(output);
     return 0;
 }
-
 
