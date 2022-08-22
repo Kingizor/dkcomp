@@ -215,7 +215,6 @@ static int bd_loop (struct COMPRESSOR *dk) {
 
 }
 
-#include <stdio.h>
 int bd_decompress (struct COMPRESSOR *dk) {
 
     enum DK_ERROR e;

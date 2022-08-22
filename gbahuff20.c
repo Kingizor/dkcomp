@@ -2,7 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - GBA BIOS Huffman (20) compressor and decompressor */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "dk_internal.h"
