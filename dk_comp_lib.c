@@ -144,15 +144,29 @@ static const struct COMP_TYPE comp_table[] = {
 
 
 /* Check whether a (de)compressor is supported */
-static int get_compressor (int index, int type, const struct COMP_TYPE **comp) {
-    if (index < 0
-    ||  index >= COMP_LIMIT
-    ||  ( type && comp_table[index].  comp == NULL)
-    ||  (         comp_table[index].decomp == NULL)) {
-        return type ? DK_ERROR_COMP_NOT
-                    : DK_ERROR_DECOMP_NOT;
-    }
+static int get_compressor (
+    int index,
+    int type,
+    size_t input_size,
+    const struct COMP_TYPE **comp
+) {
+    enum DK_ERROR e = type ? DK_ERROR_COMP_NOT : DK_ERROR_DECOMP_NOT;
+
+    /* is the index valid? */
+    if (index < 0 || index >= COMP_LIMIT)
+        return e;
+
     *comp = &comp_table[index];
+
+    /* is the chosen compressor or decompressor supported? */
+    if (( type && (*comp)->  comp == NULL)
+    ||  (!type && (*comp)->decomp == NULL))
+        return e;
+
+    /* is the data small enough to be compressed using this method? */
+    if (type && (1u << (*comp)->size_limit) < input_size)
+        return DK_ERROR_INPUT_LARGE;
+
     return 0;
 }
 
@@ -173,7 +187,7 @@ SHARED int dk_compress_mem_to_mem (
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
 
-    if ((e = get_compressor(comp_type, 1, &dk_compress))
+    if ((e = get_compressor(comp_type, 1, input_size, &dk_compress))
     ||  (e = check_input_mem(input)))
         goto error;
 
@@ -208,8 +222,8 @@ SHARED int dk_compress_file_to_mem (
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
 
-    if ((e = get_compressor(comp_type, 1, &dk_compress))
-    ||  (e = open_input_file(file_in, &cmp.in.data, &cmp.in.length, 0, 1)))
+    if ((e = open_input_file(file_in, &cmp.in.data, &cmp.in.length, 0, 1))
+    ||  (e = get_compressor(comp_type, 1, cmp.in.length, &dk_compress)))
         goto error;
     cmp.out.limit = 1 << dk_compress->size_limit;
     if ((e = open_output_buffer(&cmp.out.data, cmp.out.limit))
@@ -285,7 +299,7 @@ SHARED int dk_decompress_mem_to_mem (
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
 
-    if ((e = get_compressor(decomp_type, 0, &dk_decompress))
+    if ((e = get_compressor(decomp_type, 0, 0, &dk_decompress))
     ||  (e = check_input_mem(input)))
         goto error;
 
@@ -316,7 +330,7 @@ SHARED int dk_decompress_file_to_mem (
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
 
-    if ((e = get_compressor(decomp_type, 0, &dk_decompress))
+    if ((e = get_compressor(decomp_type, 0, 0, &dk_decompress))
     ||  (e = open_input_file(file_in, &dc.in.data, &dc.in.length, position, 0)))
         goto error;
 
