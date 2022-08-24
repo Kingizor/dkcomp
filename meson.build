@@ -24,3 +24,14 @@ libdkcomp = shared_library('dkcomp', dkc_common, gnu_symbol_visibility: 'hidden'
 executable(  'comp',   'dk_comp_util.c', link_with: libdkcomp)
 executable('decomp', 'dk_decomp_util.c', link_with: libdkcomp)
 
+# web version
+mhttpd = dependency('libmicrohttpd', required: false)
+if mhttpd.found()
+  html = configure_file(
+     input: 'dkcomp_server.html',
+    output: 'dkcomp_server.html',
+      copy:  true
+  )
+  executable('dkcomp_server', 'dkcomp_server.c', link_with: libdkcomp, dependencies: mhttpd)
+endif
+

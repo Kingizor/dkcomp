@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>dkcomp </title>
+
+<style type="text/css">
+<!--
+
+#output {
+  max-height: 200px;
+  overflow-y: scroll;
+  padding: 5px;
+  display: inline-block;
+}
+
+@keyframes notify {
+    from { background-color: #F88; }
+    to   { background-color: initial; }
+}
+
+-->
+</style>
+
+<script type="text/javascript">
+<!--
+
+var connected = 0;
+
+function pmsg (msg) {
+    var span = document.getElementById("output");
+    span.innerHTML += msg + "<br>";
+    span.scrollTop = span.scrollHeight;
+}
+function clear_output () {
+    document.getElementById("output").innerHTML = "";
+}
+
+function field_enable () {
+    var formfs = document.getElementById("formfs");
+    formfs.removeAttribute("disabled");
+}
+function field_disable () {
+    var formfs = document.getElementById("formfs");
+    formfs.setAttribute("disabled", "disabled");
+}
+
+function server_ping () {
+    var req = new XMLHttpRequest();
+    req.onreadystatechange = function () {
+        if (this.readyState == 4) {
+            if (this.status == 200 && !connected) {
+                pmsg("Connected to server.");
+                field_enable();
+                connected = 1;
+            }
+            else if (this.status != 200 && connected) {
+                pmsg("Disconnected from server.");
+                field_disable();
+                connected = 0;
+            }
+        }
+    };
+    req.open("GET", "ping");
+    req.send();
+}
+
+function server_quit () {
+    var req = new XMLHttpRequest();
+    req.onload = function () {
+        if (this.status == 200) {
+            pmsg("Server has been terminated.");
+            server_ping();
+        }
+    }
+    req.open("GET", "quit");
+    req.send();
+    pmsg("Terminating server...");
+}
+
+
+
+function download (fn, response) {
+    var link = document.createElement("a");
+    var blob = new Blob([response], {type:"application/octet-stream"});
+    var data = URL.createObjectURL(blob);
+    link.setAttribute("href", data);
+    link.setAttribute("download", fn);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(data);
+}
+
+function generate_filename (form) {
+    var fn = file.files[0].name.replace(/\.[^/.]+$/, "");
+    if (form.comp_mode.value == "0")
+        fn += "_comp";
+    else
+        fn += "_" + Number(form.decomp_offset.value).toString(16).toUpperCase();
+    fn += ".bin";
+    return fn;
+}
+
+function server_exec (form) {
+    if (!form.action)
+        return;
+
+    var file = form.file;
+    if (file.files.length != 1) {
+        pmsg("No file selected.");
+        file.style.animation = "none";
+        file.offsetHeight;
+        file.style.animation = "notify 1s";
+        return;
+    }
+
+    if (form.comp_mode.value == "0")
+        pmsg("Compressing...");
+    else
+        pmsg("Decompressing...");
+
+    var req = new XMLHttpRequest();
+    req.responseType = "blob";
+    req.onload = function () {
+        if (this.status == 200) {
+            var fn = generate_filename(form);
+            download(fn, this.response);
+            console.log(this);
+            pmsg("Saved as \"" + fn + "\". (" + this.response.size + " bytes)");
+        }
+        else {
+            var read = new FileReader();
+            read.onload = function() { pmsg(read.result + "."); };
+            read.readAsText(new Blob([this.response], {type:"text/plain"}));
+        }
+    };
+    req.open("POST", form.action);
+    req.send(new FormData(form));
+}
+
+function toggle_disabled (type, el) {
+    if (type)
+        el.removeAttribute("disabled");
+    else
+        el.setAttribute("disabled", "disabled");
+}
+
+function switch_mode (type) {
+    toggle_disabled(type, document.getElementById("offset_hex"));
+    toggle_disabled(type, document.getElementById("offset_dec"));
+}
+function update_dec (hex) {
+    document.getElementById("offset_dec").value = parseInt(hex, 16);
+}
+function update_hex (dec) {
+    document.getElementById("offset_hex").value = parseInt(dec, 10).toString(16).toUpperCase();
+}
+
+function setup () {
+
+    /* disable the offset if decompress isn't selected */
+    if (document.getElementById("decompress").checked == false)
+        switch_mode(0);
+
+    /* disable the whole form until we're connected to the server */
+    field_disable();
+
+    /* ensure hex element matches the dec element*/
+    update_hex(document.getElementById("offset_dec").value);
+
+    /* ping the server */
+    pmsg("Connecting to server...");
+    server_ping();
+    setInterval(server_ping, 2000);
+}
+
+window.addEventListener("load", setup);
+
+-->
+</script>
+
+</head>
+<body>
+
+<form action="exec" method="post" enctype="multipart/form-data" onsubmit="server_exec(this); return false;" >
+<fieldset id="formfs">
+
+<select accesskey="t" name="comp_type" id="comp_type" >
+  <optgroup label="SNES">
+    <option value="0" >DKC2/DKC3 - Big Data</option>
+    <option value="1" >DKC3 - Small Data</option>
+    <option value="2" >DKC  - Tilesets</option>
+  </optgroup>
+  <optgroup label="GB/GBC">
+  <option value="3" >DKC  - Tilemaps</option>
+  <option value="4" >DKL 1/2/3 - Tilemaps</option>
+  </optgroup>
+  <optgroup label="GBA">
+    <option value="5" >(10) - LZ77    (BIOS)</option>
+    <option value="6" >(20) - Huffman (BIOS)</option>
+    <option value="7" >(30) - RLE     (BIOS)</option>
+    <option value="8" >(50) - Huffman</option>
+    <option value="9" >(60) - Huffman</option>
+    <option value="10">Auto-Detect (GBA)</option>
+  </optgroup>
+</select>
+<br>
+
+<input accesskey="c" type="radio" name="comp_mode" id="compress"   value="0" onclick="switch_mode(0);" checked="checked" />
+<label for="compress">Compress</label>
+<br>
+
+<input accesskey="c" type="radio" name="comp_mode" id="decompress" value="1" onclick="switch_mode(1);" />
+<label for="decompress">Decompress</label>
+<br>
+
+<input accesskey="d" type="text" id="offset_dec" pattern="[0-9]+"       value="0" size="8" oninput="update_hex(this.value);" name="decomp_offset" />
+<label               for="offset_dec">Offset (Decimal)</label>                             
+<br>                                                                                       
+<input accesskey="h" type="text" id="offset_hex" pattern="[0-9A-Fa-f]+" value="0" size="8" oninput="update_dec(this.value);" />
+<label for="offset_hex">Offset (Hex)</label>
+<br>
+
+<input accesskey="o" type="file" name="file" id="file" title="You can drag files here." />
+<br>
+
+<input accesskey="x" type="submit" value="Execute" /> - 
+<input accesskey="r" type="button" value="Clear"   onclick="clear_output();" /> - 
+<input accesskey="q" type="button" value="Quit"    onclick="server_quit();"  />
+
+</fieldset>
+</form>
+
+<fieldset>
+<span id="log">
+  Message log:
+  <br>
+  <span id="output"></span>
+</span>
+</fieldset>
+
+</body>
+</html>
