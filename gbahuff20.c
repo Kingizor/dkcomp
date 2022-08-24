@@ -34,7 +34,7 @@ static int read_tree (struct COMPRESSOR *gba, size_t inpos) {
 }
 static int write_out (struct COMPRESSOR *gba, int bit) {
     if (gba->out.pos >= gba->out.limit)
-        return 1;
+        return DK_ERROR_OOB_OUTPUT_W;
     gba->out.data[gba->out.pos] |= bit << gba->out.bitpos++;
     if (gba->out.bitpos == 8) {
         gba->out.bitpos  = 0;
@@ -437,7 +437,7 @@ static int encode_data (struct BIN *bin) {
         struct VLUT v = bin->vlut[gba->in.data[i]];
         while (v.bits--) {
             if (write_bit(gba, v.sequence & 1))
-                return 1;
+                return DK_ERROR_OOB_OUTPUT_W;
             v.sequence >>= 1;
         }
     }

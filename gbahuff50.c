@@ -30,13 +30,13 @@ static int read_bit (struct COMPRESSOR *dk) {
 
 static int write_byte (struct COMPRESSOR *dk, unsigned char out) {
     if (dk->out.pos >= dk->out.limit)
-        return 1;
+        return DK_ERROR_OOB_OUTPUT_W;
     dk->out.data[dk->out.pos++] = out;
     return 0;
 }
 static int write_bit (struct COMPRESSOR *dk, int bit) {
     if (dk->out.pos >= dk->out.limit)
-        return 1;
+        return DK_ERROR_OOB_OUTPUT_W;
     dk->out.data[dk->out.pos] |= bit << dk->out.bitpos++;
     if (dk->out.bitpos == 8) {
         dk->out.bitpos  = 0;
@@ -253,7 +253,7 @@ int gbahuff50_decompress (struct COMPRESSOR *dk) {
     ||  (e = init_nodes  (&bin))
     ||  (e = init_tree   (&bin))
     ||  (e = decode_input(&bin)))
-        return 1;
+        return e;
 
     if (dk->out.pos != length)
         return DK_ERROR_SIZE_WRONG;
@@ -322,10 +322,10 @@ static int scale_counts (struct BIN *bin) {
 static int write_block (struct BIN *bin, int p, int i) {
     if (write_byte(bin->dk, p)
     ||  write_byte(bin->dk, i))
-        return 1;
+        return DK_ERROR_OOB_OUTPUT_W;
     for (; p <= i; p++)
         if (write_byte(bin->dk, bin->tree[p].count))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
     return 0;
 }
 
@@ -432,7 +432,7 @@ static int init_bytes (struct BIN *bin) {
 static int write_pattern (struct BIN *bin, struct VLUT copy) {
     while (copy.bits--) {
         if (write_bit(bin->dk, copy.pattern & 1))
-            return 1;
+            return DK_ERROR_OOB_OUTPUT_W;
         copy.pattern >>= 1;
     }
     return 0;
