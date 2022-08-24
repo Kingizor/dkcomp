@@ -20,26 +20,26 @@ struct NODE {
 };
 
 struct BIN {
-    struct COMPRESSOR *dk;
+    struct COMPRESSOR *gba;
     struct NODE *tree;
 };
 
-static int read_bit (struct COMPRESSOR *dk) {
+static int read_bit (struct COMPRESSOR *gba) {
     int v;
-    if (dk->in.pos >= dk->in.length)
+    if (gba->in.pos >= gba->in.length)
         return -1;
-    v = (dk->in.data[dk->in.pos] >> dk->in.bitpos++) & 1;
-    if (dk->in.bitpos == 8) {
-        dk->in.bitpos  = 0;
-        dk->in.pos++;
+    v = (gba->in.data[gba->in.pos] >> gba->in.bitpos++) & 1;
+    if (gba->in.bitpos == 8) {
+        gba->in.bitpos  = 0;
+        gba->in.pos++;
     }
     return v;
 }
 
-static int write_byte (struct COMPRESSOR *dk, unsigned char out) {
-    if (dk->out.pos >= dk->out.limit)
+static int write_byte (struct COMPRESSOR *gba, unsigned char out) {
+    if (gba->out.pos >= gba->out.limit)
         return -1;
-    dk->out.data[dk->out.pos++] = out;
+    gba->out.data[gba->out.pos++] = out;
     return 0;
 }
 
@@ -147,7 +147,7 @@ static void update_weights (struct BIN *bin, int node) {
     }
 }
 
-int gbahuff60_decompress (struct COMPRESSOR *dk) {
+int gbahuff60_decompress (struct COMPRESSOR *gba) {
 
     /* tree consists of:
          - two special leafs     (the "new value" and "quit" commands)
@@ -160,8 +160,21 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
         {CLEAF, 1,  0, .val = 0x101 }  /* new leaf */
     };
     int node_count = 3;
-    struct BIN bin = { dk, tree };
+    struct BIN bin = { gba, tree };
+    size_t data_length;
 
+    /* check the header */
+    if (gba->in.length < 4)
+        return DK_ERROR_INPUT_SMALL;
+    if (gba->in.data[0] != 0x60)
+        return DK_ERROR_SIG_WRONG;
+    data_length =  gba->in.data[1]
+                | (gba->in.data[2] <<  8)
+                | (gba->in.data[3] << 16);
+    gba->in.pos = 4;
+
+
+    /* process the data */
     for (;;) {
         int out  = 0;
         int quit = 0;
@@ -169,7 +182,7 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
 
         /* traverse the tree for a value */
         while (tree[node].type == CNODE) {
-            switch (read_bit(dk)) {
+            switch (read_bit(gba)) {
                 case 0: { node = tree[node].dir.L; break; }
                 case 1: { node = tree[node].dir.R; break; }
                default: { return DK_ERROR_OOB_INPUT; }
@@ -184,7 +197,7 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
                 int i;
                 for (i = 0; i < 8; i++) {
                     int bit;
-                    if ((bit = read_bit(dk)) < 0)
+                    if ((bit = read_bit(gba)) < 0)
                         return DK_ERROR_OOB_INPUT;
                     out <<= 1;
                     out |= bit;
@@ -196,13 +209,20 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
         }
         if (quit)
             break;
-        if (write_byte(dk, out))
+        if (write_byte(gba, out))
             return DK_ERROR_OOB_OUTPUT_W;
+        if (gba->out.pos > data_length)
+            return DK_ERROR_SIZE_WRONG;
+
         if (tree->weight >= 0x8000)
             rebuild_tree(&bin, node_count);
 
         update_weights(&bin, node);
     }
+
+    if (gba->out.pos != data_length)
+        return DK_ERROR_SIZE_WRONG;
+
     return 0;
 }
 
@@ -213,16 +233,16 @@ int gbahuff60_decompress (struct COMPRESSOR *dk) {
 
 /* compressor */
 
-static int write_bit (struct COMPRESSOR *dk, unsigned char val) {
-    size_t addr = dk->out.pos + dk->out.bytepos;
-    unsigned bit = dk->out.bitpos++;
-    if (addr >= dk->out.limit)
-        return 1;
-    dk->out.data[addr] &= ~(1 << bit);
-    dk->out.data[addr] |= val << bit;
-    if (dk->out.bitpos == 8) {
-        dk->out.bitpos  = 0;
-        dk->out.pos++;
+static int write_bit (struct COMPRESSOR *gba, unsigned char val) {
+    size_t addr = gba->out.pos + gba->out.bytepos;
+    unsigned bit = gba->out.bitpos++;
+    if (addr >= gba->out.limit)
+        return DK_ERROR_OOB_OUTPUT_W;
+    gba->out.data[addr] &= ~(1 << bit);
+    gba->out.data[addr] |= val << bit;
+    if (gba->out.bitpos == 8) {
+        gba->out.bitpos  = 0;
+        gba->out.pos++;
     }
     return 0;
 }
@@ -253,13 +273,13 @@ static int encode_leaf (struct BIN *bin, struct NODE *n) {
     while (bits--) {
         int bit = !!(sequence & 1);
         sequence >>= 1;
-        if (write_bit(bin->dk, bit))
+        if (write_bit(bin->gba, bit))
             return DK_ERROR_OOB_OUTPUT_W;
     }
     return 0;
 }
 
-int gbahuff60_compress (struct COMPRESSOR *dk) {
+int gbahuff60_compress (struct COMPRESSOR *gba) {
 
     struct NODE tree[515] = {
         { CNODE, 2, -1, .dir.L = 1, .dir.R = 2 },
@@ -267,11 +287,19 @@ int gbahuff60_compress (struct COMPRESSOR *dk) {
         { CLEAF, 1,  0, .val = 0x101 }
     };
     int node_count = 3;
-    struct BIN bin = { dk, tree };
+    struct BIN bin = { gba, tree };
     enum DK_ERROR e;
 
-    while (dk->in.pos < dk->in.length) {
-        int  val = dk->in.data[dk->in.pos++];
+    /* write header */
+    if (write_byte(gba, 0x60)
+    ||  write_byte(gba, gba->in.length)
+    ||  write_byte(gba, gba->in.length >>  8)
+    ||  write_byte(gba, gba->in.length >> 16))
+        return DK_ERROR_OOB_OUTPUT_W;
+
+    /* process data */
+    while (gba->in.pos < gba->in.length) {
+        int  val = gba->in.data[gba->in.pos++];
         int node = nsearch(tree, node_count, val);
         if (!node) { /* leaf not present in tree, so add a new leaf */
             int i;
@@ -282,7 +310,7 @@ int gbahuff60_compress (struct COMPRESSOR *dk) {
 
             /* write the value */
             for (i = 0; i < 8; i++)
-                if (write_bit(dk, (val >> (7^i)) & 1))
+                if (write_bit(gba, (val >> (7^i)) & 1))
                     return DK_ERROR_OOB_OUTPUT_W;
 
             /* add the leaf to the tree */
@@ -303,10 +331,10 @@ int gbahuff60_compress (struct COMPRESSOR *dk) {
         return e;
 
     /* excess */
-    if (dk->out.bitpos || dk->out.bytepos) {
-        if ((dk->out.pos+1) > dk->out.limit)
+    if (gba->out.bitpos || gba->out.bytepos) {
+        if ((gba->out.pos+1) > gba->out.limit)
             return DK_ERROR_OOB_OUTPUT_W;
-        dk->out.pos++;
+        gba->out.pos++;
     }
     return 0;
 }
