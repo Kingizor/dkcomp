@@ -81,7 +81,7 @@ int gbarle_compress (struct COMPRESSOR *gba) {
         goto write_error;
 
     /* happy defaults */
-    for (i = 0; i < gba->in.length+1; i++) {
+    for (i = 0; i <= gba->in.length; i++) {
         static const struct PATH p = { NULL, -1llu, { 0,0 } };
         steps[i] = p;
     }
@@ -89,34 +89,34 @@ int gbarle_compress (struct COMPRESSOR *gba) {
 
     /* determine the best path */
     for (i = 0; i < gba->in.length; i++) {
-        size_t rle_count, copy_count, copy_limit;
         int a = read_byte(gba);
+        size_t count = 0, limit = 130;
 
         /* count how many subsequent bytes match */
-        if (a < 0) break;
-        for (rle_count = 1; rle_count < 130; rle_count++)
-            if (a != read_byte(gba))
-                break;
+        if (limit > (gba->in.length-i+1))
+            limit =  gba->in.length-i+1;
+        while (count++ < limit && a == read_byte(gba));
         gba->in.pos = i+1;
 
         /* test RLE cases */
-        for (; rle_count >= 3; rle_count--) {
-            struct PATH *next = &steps[i+rle_count];
+        for (; count >= 3; count--) {
+            struct PATH *next = &steps[i+count];
             size_t used = steps[i].used + 2.0;
             if (next->used > used) {
-                struct PATH p = { &steps[i], used, { 1, rle_count - 3 } };
+                struct PATH p = { &steps[i], used, { 1, count - 3 } };
                 *next = p;
             }
         }
 
         /* test non-RLE cases */
-        copy_limit = ((gba->in.length+1 - gba->in.pos) < 128) ?
-                      (gba->in.length+1 - gba->in.pos) : 128;
-        for (copy_count = 1; copy_count < copy_limit; copy_count++) {
-            struct PATH *next = &steps[i+copy_count];
-            size_t used = steps[i].used + 1.0 + copy_count;
+        limit = 128;
+        if (limit > (gba->in.length-i+1))
+            limit = (gba->in.length-i+1);
+        for (count = 1; count < limit; count++) {
+            struct PATH *next = &steps[i+count];
+            size_t used = steps[i].used + 1.0 + count;
             if (next->used > used) {
-                struct PATH p = { &steps[i], used, { 0, copy_count - 1 } };
+                struct PATH p = { &steps[i], used, { 0, count - 1 } };
                 *next = p;
             }
         }
