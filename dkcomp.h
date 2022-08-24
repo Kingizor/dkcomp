@@ -9,8 +9,8 @@
 
 /* All compression and decompression functions listed here return 0 if they
    complete successfully, or 1 if an error is encountered.
-   If an error is encountered, calling dk_get_error(); will return a
-   character string explaining the error. (not thread-safe)
+   If an error is encountered, calling dk_get_error(error_code); will
+   return a pointer to a character string explaining the error.
 
    For compression and decompression to memory, the functions will allocate
    data necessary for the provided output pointer, which must be freed
@@ -23,11 +23,11 @@ enum DK_FORMAT {
     DKCCHR_COMP,
     DKCGBC_COMP,
        DKL_COMP,
-GBA_HUFF60_COMP,
-GBA_HUFF50_COMP,
-GBA_HUFF20_COMP,
   GBA_LZ77_COMP,
+GBA_HUFF20_COMP,
    GBA_RLE_COMP,
+GBA_HUFF50_COMP,
+GBA_HUFF60_COMP,
        GBA_COMP, /* auto-detect GBA */
       COMP_LIMIT
 };
