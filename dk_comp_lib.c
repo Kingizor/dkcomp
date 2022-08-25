@@ -186,6 +186,8 @@ SHARED int dk_compress_mem_to_mem (
     const struct COMP_TYPE *dk_compress;
     struct COMPRESSOR cmp;
     memset(&cmp, 0, sizeof(struct COMPRESSOR));
+    *output      = NULL;
+    *output_size = 0;
 
     if ((e = get_compressor(comp_type, 1, input_size, &dk_compress))
     ||  (e = check_input_mem(input)))
@@ -298,6 +300,8 @@ SHARED int dk_decompress_mem_to_mem (
     const struct COMP_TYPE *dk_decompress;
     struct COMPRESSOR dc;
     memset(&dc, 0, sizeof(struct COMPRESSOR));
+    *output      = NULL;
+    *output_size = 0;
 
     if ((e = get_compressor(decomp_type, 0, 0, &dk_decompress))
     ||  (e = check_input_mem(input)))
