@@ -13,9 +13,10 @@ static int read_byte (struct COMPRESSOR *gbc) {
     return gbc->in.data[gbc->in.pos++];
 }
 static int read_out (struct COMPRESSOR *gbc, size_t addr) {
+    addr = gbc->out.pos - addr;
     if (addr >= gbc->out.pos)
         return -1;
-    return gbc->out.data[gbc->out.pos - addr];
+    return gbc->out.data[addr];
 }
 static int write_byte (struct COMPRESSOR *gbc, unsigned char val) {
     if (gbc->out.pos >= gbc->out.limit)
