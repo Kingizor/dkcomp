@@ -21,10 +21,9 @@ dkc_common = [
 libdkcomp = shared_library(
   'dkcomp',
   dkc_common,
-  install: true,
   gnu_symbol_visibility: 'hidden'
 )
-install_headers('dkcomp.h')
+depdkcomp = declare_dependency(link_with: libdkcomp, include_directories: '.')
 
 # standalone utilities
 executable(  'comp',   'dk_comp_util.c', link_with: libdkcomp)
