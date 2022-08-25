@@ -18,7 +18,13 @@ dkc_common = [
   'gba_auto.c'
 ]
 
-libdkcomp = shared_library('dkcomp', dkc_common, gnu_symbol_visibility: 'hidden')
+libdkcomp = shared_library(
+  'dkcomp',
+  dkc_common,
+  install: true,
+  gnu_symbol_visibility: 'hidden'
+)
+install_headers('dkcomp.h')
 
 # standalone utilities
 executable(  'comp',   'dk_comp_util.c', link_with: libdkcomp)
