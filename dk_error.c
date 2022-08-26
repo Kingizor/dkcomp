@@ -46,10 +46,12 @@ static const char *dk_error_messages[] = {
     [DK_ERROR_HUFF_OUTSIZE] = "Output isn't large enough for the tree table",
     [DK_ERROR_HUFF_STACKS]  = "Tried to create too many stacks when generating GBA tree",
     [DK_ERROR_HUFF_NODES]   = "Tried to place too many nodes in a single stack when generating GBA tree",
+    [DK_ERROR_HUFF_NODELIM] = "Data seems to contain too many leaf nodes",
+    [DK_ERROR_HUFF_LEAFVAL] = "Tried to add a leaf that already exists",
 
     [DK_ERROR_TABLE_RANGE]  = "The frequency table contains an invalid range (a > b)",
     [DK_ERROR_TABLE_VALUE]  = "The frequency table contains too many values",
-    [DK_ERROR_TABLE_ZERO]   = "All bytes occur zero times.",
+    [DK_ERROR_TABLE_ZERO]   = "All bytes occur zero times",
 
     [DK_ERROR_VERIFY_DEC]   = "Failed to decompress the newly compressed data",
     [DK_ERROR_VERIFY_SIZE]  = "The size of the decompressed data doesn't match the original",

@@ -6,6 +6,8 @@
 #include <string.h>
 #include "dk_internal.h"
 
+#define NODE_LIMIT 515
+
 /* (de)compression routine used in GBA versions of DKC2 and DKC3 */
 /* most functions are shared between compressor and decompressor */
 
@@ -42,6 +44,7 @@ static int write_byte (struct COMPRESSOR *gba, unsigned char out) {
     gba->out.data[gba->out.pos++] = out;
     return 0;
 }
+
 
 static void rebuild_tree (struct BIN *bin, int node_count) {
     struct NODE *tree = bin->tree;
@@ -91,12 +94,24 @@ static void rebuild_tree (struct BIN *bin, int node_count) {
         }
 }
 
-static int add_leaf (struct BIN *bin, int nc, unsigned char val) {
+static int add_leaf (struct BIN *bin, int *node, int nc, unsigned char val) {
     struct NODE *tree = bin->tree;
     struct NODE new_leaf =
         { CLEAF, 0, nc-1, .val=val };
     struct NODE new_node =
         { CNODE, 1, tree[nc-1].parent, .dir.L = nc, .dir.R = nc+1 };
+    int i;
+
+    /* upper limit for nodes */
+    if (nc+1 >= NODE_LIMIT)
+        return DK_ERROR_HUFF_NODELIM;
+
+    /* it's possible for malformed data to have duplicate leaves */
+    /* does the leaf already exist in our tree? */
+    for (i = 0; i < nc; i++)
+        if (bin->tree[i].type == CLEAF
+        &&  bin->tree[i].val  == val)
+            return DK_ERROR_HUFF_LEAFVAL;
 
     /* add the new leaf */
     tree[nc+1] = new_leaf;
@@ -108,7 +123,8 @@ static int add_leaf (struct BIN *bin, int nc, unsigned char val) {
     /* add the new node */
     tree[nc-1] = new_node;
 
-    return nc+1;
+    *node = nc+1;
+    return 0;
 }
 
 static void swap_nodes (struct BIN *bin, int aa, int bb) {
@@ -154,7 +170,7 @@ int gbahuff60_decompress (struct COMPRESSOR *gba) {
          - up to 256 value leafs (each unique byte encountered so far)
          - nodes to connect every leaf
     */
-    struct NODE tree[515] = {
+    struct NODE tree[NODE_LIMIT] = {
         {CNODE, 2, -1, .dir.L = 1, .dir.R = 2 },
         {CLEAF, 1,  0, .val = 0x100 }, /* quit */
         {CLEAF, 1,  0, .val = 0x101 }  /* new leaf */
@@ -162,6 +178,7 @@ int gbahuff60_decompress (struct COMPRESSOR *gba) {
     int node_count = 3;
     struct BIN bin = { gba, tree };
     size_t data_length;
+    enum DK_ERROR e;
 
     /* check the header */
     if (gba->in.length < 4)
@@ -179,6 +196,7 @@ int gbahuff60_decompress (struct COMPRESSOR *gba) {
         int out  = 0;
         int quit = 0;
         int node = 0;
+        int i;
 
         /* traverse the tree for a value */
         while (tree[node].type == CNODE) {
@@ -194,7 +212,6 @@ int gbahuff60_decompress (struct COMPRESSOR *gba) {
                default: { out = tree[node].val; break; }
             case 0x100: { quit = 1; break; }
             case 0x101: {
-                int i;
                 for (i = 0; i < 8; i++) {
                     int bit;
                     if ((bit = read_bit(gba)) < 0)
@@ -202,7 +219,8 @@ int gbahuff60_decompress (struct COMPRESSOR *gba) {
                     out <<= 1;
                     out |= bit;
                 }
-                node = add_leaf(&bin, node_count, out);
+                if ((e = add_leaf(&bin, &node, node_count, out)))
+                    return e;
                 node_count += 2;
                 break;
             }
@@ -214,8 +232,17 @@ int gbahuff60_decompress (struct COMPRESSOR *gba) {
         if (gba->out.pos > data_length)
             return DK_ERROR_SIZE_WRONG;
 
-        if (tree->weight >= 0x8000)
+        /* rebuild the tree if root weight exceeds 0x8000 */
+        if (tree->weight >= 0x8000) {
             rebuild_tree(&bin, node_count);
+
+            /* the old node pointer is invalid after rebuilding the tree */
+            for (i = 0; i < node_count; i++)
+                if (bin.tree[i].type == CLEAF
+                &&  bin.tree[i].val  == out)
+                    break;
+            node = i;
+        }
 
         update_weights(&bin, node);
     }
@@ -281,7 +308,7 @@ static int encode_leaf (struct BIN *bin, struct NODE *n) {
 
 int gbahuff60_compress (struct COMPRESSOR *gba) {
 
-    struct NODE tree[515] = {
+    struct NODE tree[NODE_LIMIT] = {
         { CNODE, 2, -1, .dir.L = 1, .dir.R = 2 },
         { CLEAF, 1,  0, .val = 0x100 },
         { CLEAF, 1,  0, .val = 0x101 }
@@ -301,8 +328,8 @@ int gbahuff60_compress (struct COMPRESSOR *gba) {
     while (gba->in.pos < gba->in.length) {
         int  val = gba->in.data[gba->in.pos++];
         int node = nsearch(tree, node_count, val);
+        int i;
         if (!node) { /* leaf not present in tree, so add a new leaf */
-            int i;
 
             /* send the new leaf command */
             if ((e = encode_leaf(&bin, &tree[nsearch(tree, node_count, 0x101)])))
@@ -314,15 +341,27 @@ int gbahuff60_compress (struct COMPRESSOR *gba) {
                     return DK_ERROR_OOB_OUTPUT_W;
 
             /* add the leaf to the tree */
-            node = add_leaf(&bin, node_count, val);
+            if ((e = add_leaf(&bin, &node, node_count, val)))
+                return e;
             node_count += 2;
         }
         else { /* use the existing leaf */
             if ((e = encode_leaf(&bin, &tree[node])))
                 return e;
         }
-        if (tree->weight >= 0x8000)
+
+        /* rebuild the tree is the root node becomes too heavy */
+        if (tree->weight >= 0x8000) {
             rebuild_tree(&bin, node_count);
+
+            /* the old node pointer is invalid after rebuilding the tree */
+            for (i = 0; i < node_count; i++)
+                if (tree[i].type == CLEAF
+                &&  tree[i].val  == val)
+                    break;
+            node = i;
+        }
+
         update_weights(&bin, node);
     }
 
