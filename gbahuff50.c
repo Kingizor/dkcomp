@@ -10,39 +10,39 @@
 /* this one stores the frequency of each byte near the start */
 /* and constructs the binary tree based on that */
 
-static int read_byte (struct COMPRESSOR *dk) {
-    if (dk->in.pos >= dk->in.length)
+static int read_byte (struct COMPRESSOR *gba) {
+    if (gba->in.pos >= gba->in.length)
         return -1;
-    return dk->in.data[dk->in.pos++];
+    return gba->in.data[gba->in.pos++];
 }
 
-static int read_bit (struct COMPRESSOR *dk) {
+static int read_bit (struct COMPRESSOR *gba) {
     int v;
-    if (dk->in.pos >= dk->in.length)
+    if (gba->in.pos >= gba->in.length)
         return -1;
-    v = (dk->in.data[dk->in.pos] >> dk->in.bitpos++) & 1;
-    if (dk->in.bitpos == 8) {
-        dk->in.bitpos  = 0;
-        dk->in.pos++;
+    v = (gba->in.data[gba->in.pos] >> gba->in.bitpos++) & 1;
+    if (gba->in.bitpos == 8) {
+        gba->in.bitpos  = 0;
+        gba->in.pos++;
     }
     return v;
 }
 
-static int write_byte (struct COMPRESSOR *dk, unsigned char out) {
-    if (dk->out.pos >= dk->out.limit)
+static int write_byte (struct COMPRESSOR *gba, unsigned char out) {
+    if (gba->out.pos >= gba->out.limit)
         return DK_ERROR_OOB_OUTPUT_W;
-    dk->out.data[dk->out.pos++] = out;
+    gba->out.data[gba->out.pos++] = out;
     return 0;
 }
-static int write_bit (struct COMPRESSOR *dk, int bit) {
-    if (dk->out.pos >= dk->out.limit)
+static int write_bit (struct COMPRESSOR *gba, int bit) {
+    if (gba->out.pos >= gba->out.limit)
         return DK_ERROR_OOB_OUTPUT_W;
-    dk->out.data[dk->out.pos] |= bit << dk->out.bitpos++;
-    if (dk->out.bitpos == 8) {
-        dk->out.bitpos  = 0;
-        dk->out.pos++;
-        if (dk->out.pos < dk->out.limit)
-            dk->out.data[dk->out.pos] = 0;
+    gba->out.data[gba->out.pos] |= bit << gba->out.bitpos++;
+    if (gba->out.bitpos == 8) {
+        gba->out.bitpos  = 0;
+        gba->out.pos++;
+        if (gba->out.pos < gba->out.limit)
+            gba->out.data[gba->out.pos] = 0;
     }
     return 0;
 }
@@ -68,7 +68,7 @@ struct VLUT {
 };
 
 struct BIN {
-    struct COMPRESSOR *dk;
+    struct COMPRESSOR *gba;
     struct NODE tree[513];
     struct VLUT vlut[257];
     struct NODE   *root;
@@ -84,10 +84,10 @@ static void add_leaf (struct NODE *n, size_t count, int value) {
 
 /* these data segments have a 0x50 signature byte */
 /* followed by 24-bit length */
-int read_header (struct COMPRESSOR *dk, size_t *length) {
+int read_header (struct COMPRESSOR *gba, size_t *length) {
     int c,i;
 
-    if ((c = read_byte(dk)) < 0)
+    if ((c = read_byte(gba)) < 0)
         return DK_ERROR_OOB_INPUT;
 
     if (c != 0x50)
@@ -95,7 +95,7 @@ int read_header (struct COMPRESSOR *dk, size_t *length) {
 
     *length = 0;
     for (i = 0; i < 3; i++) {
-        if ((c = read_byte(dk)) < 0)
+        if ((c = read_byte(gba)) < 0)
             return DK_ERROR_OOB_INPUT;
         *length |= c << (i << 3);
     }
@@ -126,8 +126,8 @@ static int init_nodes (struct BIN *bin) {
     /* read the frequency values from ROM */
     for (;;) {
         int a,b;
-        if ((a = read_byte(bin->dk)) < 0
-        ||  (b = read_byte(bin->dk)) < 0)
+        if ((a = read_byte(bin->gba)) < 0
+        ||  (b = read_byte(bin->gba)) < 0)
             return DK_ERROR_OOB_INPUT;
         if (bin->node_count && !a)
             break;
@@ -135,7 +135,7 @@ static int init_nodes (struct BIN *bin) {
             return DK_ERROR_TABLE_RANGE;
         for (; a <= b; a++) {
             int c;
-            if ((c = read_byte(bin->dk)) < 0)
+            if ((c = read_byte(bin->gba)) < 0)
                 return DK_ERROR_OOB_INPUT;
             if (bin->node_count >= 256) {
                 return DK_ERROR_TABLE_VALUE;
@@ -156,8 +156,8 @@ static int init_nodes (struct BIN *bin) {
     bin->node_count = i;
 
     /* adjust the output position */
-    if ((bin->dk->in.pos & 3) < 2)
-         bin->dk->in.pos &= ~1;
+    if ((bin->gba->in.pos & 3) < 2)
+         bin->gba->in.pos &= ~1;
 
     return 0;
 }
@@ -222,7 +222,7 @@ static int decode_input (struct BIN *bin) {
     struct NODE *current = bin->root;
     for (;;) {
         int bit;
-        if ((bit = read_bit(bin->dk)) < 0)
+        if ((bit = read_bit(bin->gba)) < 0)
             return DK_ERROR_OOB_INPUT;
 
         if (bit)
@@ -233,7 +233,7 @@ static int decode_input (struct BIN *bin) {
         if (current->type == CLEAF) {
             if (current->value == 256) /* quit */
                 break;
-            if (write_byte(bin->dk, current->value))
+            if (write_byte(bin->gba, current->value))
                 return DK_ERROR_OOB_OUTPUT_W;
             current = bin->root;
         }
@@ -241,21 +241,21 @@ static int decode_input (struct BIN *bin) {
     return 0;
 }
 
-int gbahuff50_decompress (struct COMPRESSOR *dk) {
+int gbahuff50_decompress (struct COMPRESSOR *gba) {
     struct BIN bin;
     size_t length;
     enum DK_ERROR e;
 
     memset(&bin, 0, sizeof(struct BIN));
-    bin.dk = dk;
+    bin.gba= gba;
 
-    if ((e = read_header (dk, &length))
+    if ((e = read_header (gba, &length))
     ||  (e = init_nodes  (&bin))
     ||  (e = init_tree   (&bin))
     ||  (e = decode_input(&bin)))
         return e;
 
-    if (dk->out.pos != length)
+    if (gba->out.pos != length)
         return DK_ERROR_SIZE_WRONG;
 
     return 0;
@@ -320,11 +320,11 @@ static int scale_counts (struct BIN *bin) {
 }
 
 static int write_block (struct BIN *bin, int p, int i) {
-    if (write_byte(bin->dk, p)
-    ||  write_byte(bin->dk, i))
+    if (write_byte(bin->gba, p)
+    ||  write_byte(bin->gba, i))
         return DK_ERROR_OOB_OUTPUT_W;
     for (; p <= i; p++)
-        if (write_byte(bin->dk, bin->tree[p].count))
+        if (write_byte(bin->gba, bin->tree[p].count))
             return DK_ERROR_OOB_OUTPUT_W;
     return 0;
 }
@@ -371,8 +371,8 @@ static int write_tables (struct BIN *bin) {
             return DK_ERROR_OOB_OUTPUT_W;
 
     /* tables are terminated by double zero */
-    if (write_byte(bin->dk, 0)
-    ||  write_byte(bin->dk, 0))
+    if (write_byte(bin->gba, 0)
+    ||  write_byte(bin->gba, 0))
         return DK_ERROR_OOB_OUTPUT_W;
 
     return 0;
@@ -383,10 +383,10 @@ static int write_header (struct BIN *bin) {
     enum DK_ERROR e;
 
     /* write signature byte and 24-bit length */
-    if (write_byte(bin->dk, 0x50)
-    ||  write_byte(bin->dk, bin->dk->in.length)
-    ||  write_byte(bin->dk, bin->dk->in.length >>  8)
-    ||  write_byte(bin->dk, bin->dk->in.length >> 16))
+    if (write_byte(bin->gba, 0x50)
+    ||  write_byte(bin->gba, bin->gba->in.length)
+    ||  write_byte(bin->gba, bin->gba->in.length >>  8)
+    ||  write_byte(bin->gba, bin->gba->in.length >> 16))
         return DK_ERROR_OOB_OUTPUT_W;
 
     /* scale the leaf counts */
@@ -410,8 +410,8 @@ static int init_bytes (struct BIN *bin) {
     bin->tree[256].count = 1;
 
     /* count how many times each value occurs */
-    for (i = 0; i < bin->dk->in.length; i++)
-        bin->tree[bin->dk->in.data[i]].count++;
+    for (i = 0; i < bin->gba->in.length; i++)
+        bin->tree[bin->gba->in.data[i]].count++;
 
     /* write the header and the count table(s) */
     if ((e = write_header(bin)))
@@ -431,7 +431,7 @@ static int init_bytes (struct BIN *bin) {
 
 static int write_pattern (struct BIN *bin, struct VLUT copy) {
     while (copy.bits--) {
-        if (write_bit(bin->dk, copy.pattern & 1))
+        if (write_bit(bin->gba, copy.pattern & 1))
             return DK_ERROR_OOB_OUTPUT_W;
         copy.pattern >>= 1;
     }
@@ -444,9 +444,9 @@ static int encode_output (struct BIN *bin) {
     generate_vlut(bin);
 
     /* encode each byte from input */
-    while (bin->dk->in.pos < bin->dk->in.length) {
+    while (bin->gba->in.pos < bin->gba->in.length) {
         int c;
-        if ((c = read_byte(bin->dk)) < 0)
+        if ((c = read_byte(bin->gba)) < 0)
             return DK_ERROR_OOB_INPUT;
         if (write_pattern(bin, bin->vlut[c]))
             return DK_ERROR_OOB_OUTPUT_W;
@@ -457,17 +457,17 @@ static int encode_output (struct BIN *bin) {
         return DK_ERROR_OOB_OUTPUT_W;
 
     /* write the excess */
-    bin->dk->out.pos += !!bin->dk->out.bitpos;
+    bin->gba->out.pos += !!bin->gba->out.bitpos;
 
     return 0;
 }
 
-int gbahuff50_compress (struct COMPRESSOR *dk) {
+int gbahuff50_compress (struct COMPRESSOR *gba) {
     struct BIN bin;
     enum DK_ERROR e;
 
     memset(&bin, 0, sizeof(struct BIN));
-    bin.dk = dk;
+    bin.gba = gba;
 
     if ((e = init_bytes   (&bin))
     ||  (e = init_tree    (&bin))
