@@ -135,7 +135,7 @@ struct BIN {
 static void reset_steps (struct BIN *bin) {
     size_t i;
     for (i = 0; i <= bin->dk->in.length; i++) {
-        static const struct PATH p = { NULL, -1llu, {0,0,0} };
+        static const struct PATH p = { NULL, (size_t)-1, {0,0,0} };
         bin->steps[i] = p;
     }
     bin->steps[0].used = 0;
@@ -456,7 +456,7 @@ static int write_data (struct BIN *bin) {
 
 int dkcchr_compress (struct COMPRESSOR *dk) {
     struct BIN bin = { dk, NULL, NULL, {0} };
-    size_t least_used_c = -1llu;
+    size_t least_used_c = (size_t)-1;
     int    least_used_n = 0;
     int i;
     enum DK_ERROR e;

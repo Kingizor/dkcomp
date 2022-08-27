@@ -57,7 +57,7 @@ struct BIN {
 static void clear_path (struct BIN *bin) {
     size_t i;
     for (i = 0; i <= bin->dk->in.length; i++) {
-        static const struct PATH p = { NULL, -1llu, 0, 0 };
+        static const struct PATH p = { NULL, (size_t)-1, 0, 0 };
         bin->steps[i] = p;
     }
     bin->steps[0].used = 0;

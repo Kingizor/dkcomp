@@ -91,7 +91,7 @@ int gbalz77_compress (struct COMPRESSOR *gba) {
 
     /* happy defaults */
     for (i = 0; i < gba->in.length+1; i++) {
-        static const struct PATH p = { NULL, -1llu, { 0,0 } };
+        static const struct PATH p = { NULL, (size_t)-1, { 0,0 } };
         steps[i] = p;
     }
     steps[0].used = 0;
