@@ -42,6 +42,7 @@ enum DK_ERROR {
     DK_ERROR_SIZE_WRONG,
     DK_ERROR_EARLY_EOF,
 
+    DK_ERROR_BAD_FORMAT,
     DK_ERROR_GBA_DETECT,
     DK_ERROR_SIG_WRONG,
 
@@ -94,6 +95,7 @@ int    dkcchr_decompress (struct COMPRESSOR*);
 int      dkcchr_compress (struct COMPRESSOR*);
 int      dkcgbc_compress (struct COMPRESSOR*);
 int    dkcgbc_decompress (struct COMPRESSOR*);
+int         dkl_compress (struct COMPRESSOR*);
 int       dkl_decompress (struct COMPRESSOR*);
 int gbahuff60_decompress (struct COMPRESSOR*);
 int   gbahuff60_compress (struct COMPRESSOR*);

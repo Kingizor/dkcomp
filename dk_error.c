@@ -31,6 +31,7 @@ static const char *dk_error_messages[] = {
     [DK_ERROR_SIZE_WRONG]   = "Decompressed size doesn't match the predicted size",
     [DK_ERROR_EARLY_EOF]    = "Unexpected end of input",
 
+    [DK_ERROR_BAD_FORMAT]   = "This data can't be compressed using this format",
     [DK_ERROR_GBA_DETECT]   = "Failed to detect compression type",
     [DK_ERROR_SIG_WRONG]    = "Data has an incorrect signature byte",
 

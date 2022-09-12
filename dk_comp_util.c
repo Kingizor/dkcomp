@@ -36,7 +36,7 @@ int main (int argc, char *argv[]) {
         {        SD_COMP, "SNES DKC3 Small Data"   },
         {    DKCCHR_COMP, "SNES DKC Tilesets"      },
         {    DKCGBC_COMP, " GBC DKC Tilemaps"      },
-        {       DKL_COMP, "     Reserved"          },
+        {       DKL_COMP, " GB  DKL Tilemaps"      },
         {  GBA_LZ77_COMP, " GBA BIOS LZ77 (10)"    },
         {GBA_HUFF20_COMP, " GBA BIOS Huffman (20)" },
         {   GBA_RLE_COMP, " GBA BIOS RLE (30)"     },
