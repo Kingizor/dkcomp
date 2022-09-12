@@ -10,6 +10,7 @@ dkc_common = [
   'dkcchr.c',
   'dkcgbc.c',
   'dkl_tilemap.c',
+  'dkl_tileset.c',
   'gbahuff20.c',
   'gbahuff50.c',
   'gbahuff60.c',

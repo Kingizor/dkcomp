@@ -92,4 +92,21 @@ int dk_decompress_file_to_file (
     size_t position
 );
 
+
+/* DKL Huffman functions */
+int dkl_huffman_decode (
+    unsigned char   *input, size_t    input_size,
+    unsigned char **output, size_t  *output_size,
+    unsigned char    *tree, size_t expected_size
+);
+int dkl_huffman_encode (
+    unsigned char  *input,  size_t   input_size,
+    unsigned char **output, size_t *output_size,
+    unsigned char  *tree
+);
+int dkl_huffman_tree (
+    unsigned char *input, size_t input_size,
+    unsigned char **tree
+);
+
 #endif
