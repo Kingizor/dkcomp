@@ -29,7 +29,7 @@ SHARED int dkl_huffman_decode (
     unsigned char   *input, size_t   insize,
     unsigned char **output, size_t *outsize,
     unsigned char    *tree, /* &rom[0x3D00] */
-    size_t count /* how many bytes to output until we stop */
+    size_t count /* how many tiles to output until we stop */
 ) {
     size_t rpos = 0;
     size_t wpos = 0;
@@ -38,7 +38,6 @@ SHARED int dkl_huffman_decode (
     *output = malloc(0x10 * count);
     if (*output == NULL)
         return DK_ERROR_ALLOC;
-    *outsize = count;
 
     for (;;) {
         int c;
@@ -62,7 +61,7 @@ SHARED int dkl_huffman_decode (
                 node = b;
             }
             else { /* write value and return to root */
-                if (wpos > *outsize) {
+                if (wpos > count) {
                     free(*output); *output = NULL;
                     return DK_ERROR_OOB_OUTPUT_W;
                 }
@@ -73,6 +72,7 @@ SHARED int dkl_huffman_decode (
             }
         }
     }
+    *outsize = 0x10 * count;
 quit:
     return 0;
 }

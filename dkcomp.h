@@ -97,7 +97,7 @@ int dk_decompress_file_to_file (
 int dkl_huffman_decode (
     unsigned char   *input, size_t    input_size,
     unsigned char **output, size_t  *output_size,
-    unsigned char    *tree, size_t expected_size
+    unsigned char    *tree, size_t    tile_count 
 );
 int dkl_huffman_encode (
     unsigned char  *input,  size_t   input_size,
