@@ -9,7 +9,7 @@ dkc_common = [
   'smalldata.c',
   'dkcchr.c',
   'dkcgbc.c',
-  'dkl_decomp.c',
+  'dkl_tilemap.c',
   'gbahuff20.c',
   'gbahuff50.c',
   'gbahuff60.c',
