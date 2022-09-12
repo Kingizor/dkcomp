@@ -34,8 +34,9 @@ SHARED int dkl_huffman_decode (
     size_t rpos = 0;
     size_t wpos = 0;
     unsigned char node = 0xFE;
+    size_t outlim = 0x10 * count;
 
-    *output = malloc(0x10 * count);
+    *output = malloc(outlim);
     if (*output == NULL)
         return DK_ERROR_ALLOC;
 
@@ -61,7 +62,7 @@ SHARED int dkl_huffman_decode (
                 node = b;
             }
             else { /* write value and return to root */
-                if (wpos > count) {
+                if (wpos > outlim) {
                     free(*output); *output = NULL;
                     return DK_ERROR_OOB_OUTPUT_W;
                 }
@@ -72,7 +73,7 @@ SHARED int dkl_huffman_decode (
             }
         }
     }
-    *outsize = 0x10 * count;
+    *outsize = outlim;
 quit:
     return 0;
 }
