@@ -30,7 +30,7 @@ struct CINFO {
     unsigned char *input;
     size_t    input_size;
     size_t decomp_offset;
-    int comp_type; /* format, 0-n */
+    enum DK_FORMAT comp_format;
     enum COMP_MODE comp_mode;
 };
 
@@ -96,8 +96,8 @@ static enum MHD_Result iterate_post (
         cinfo->comp_mode = *data == '1';
         return MHD_YES;
     }
-    else if (!strcmp(key, "comp_type")) {
-        cinfo->comp_type = strtol(data, NULL, 10);
+    else if (!strcmp(key, "comp_format")) {
+        cinfo->comp_format = strtol(data, NULL, 10);
         return MHD_YES;
     }
     else if (!strcmp(key, "decomp_offset")) {
@@ -248,7 +248,7 @@ static enum MHD_Result http_response (
         else {
             if (cinfo->comp_mode == DK_CHECK_SIZE) {
                 e = dk_compressed_size_mem(
-                    cinfo->comp_type,
+                    cinfo->comp_format,
                     cinfo->input      + cinfo->decomp_offset,
                     cinfo->input_size - cinfo->decomp_offset,
                     &size
@@ -258,7 +258,7 @@ static enum MHD_Result http_response (
                 e = ((cinfo->comp_mode == DK_DECOMPRESS)
                   ? dk_decompress_mem_to_mem
                   :   dk_compress_mem_to_mem)(
-                    cinfo->comp_type,
+                    cinfo->comp_format,
                     &data, &size,
                     cinfo->input      + cinfo->decomp_offset,
                     cinfo->input_size - cinfo->decomp_offset
