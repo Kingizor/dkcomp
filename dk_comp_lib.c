@@ -115,6 +115,12 @@ static int verify_data (enum DK_FORMAT comp_type, struct COMPRESSOR *cmp) {
 }
 #endif
 
+/* we initially allocate more than needed */
+/* here we reduce the allocate size to the output size */
+static void shrink_buffer (unsigned char **data, size_t size) {
+    unsigned char *d = realloc(*data, size);
+    if (d != NULL) *data = d;
+}
 
 
 
@@ -205,6 +211,7 @@ SHARED int dk_compress_mem_to_mem (
         goto error;
 #endif
 
+    shrink_buffer(&cmp.out.data, cmp.out.pos);
     *output      = cmp.out.data;
     *output_size = cmp.out.pos;
     return 0;
@@ -237,6 +244,7 @@ SHARED int dk_compress_file_to_mem (
 #endif
 
     free(cmp.in.data); cmp.in.data = NULL;
+    shrink_buffer(&cmp.out.data, cmp.out.pos);
     *output      = cmp.out.data;
     *output_size = cmp.out.pos;
     return 0;
@@ -314,6 +322,7 @@ SHARED int dk_decompress_mem_to_mem (
     if ((e = open_output_buffer(&dc.out.data, dc.out.limit))
     ||  (e = dk_decompress->decomp(&dc)))
         goto error;
+    shrink_buffer(&dc.out.data, dc.out.limit);
     *output      = dc.out.data;
     *output_size = dc.out.pos;
     return 0;
@@ -345,6 +354,7 @@ SHARED int dk_decompress_file_to_mem (
         goto error;
 
     free(dc.in.data); dc.in.data = NULL;
+    shrink_buffer(&dc.out.data, dc.out.limit);
     *output      = dc.out.data;
     *output_size = dc.out.pos;
     return 0;
