@@ -19,13 +19,19 @@ enum PRG_STATE {
     PRG_QUIT
 };
 
+enum COMP_MODE {
+    DK_CHECK_SIZE,
+    DK_DECOMPRESS,
+    DK_COMPRESS
+};
+
 struct CINFO {
     struct MHD_PostProcessor *processor;
     unsigned char *input;
     size_t    input_size;
     size_t decomp_offset;
     int comp_type; /* format, 0-n */
-    int comp_mode; /* 0 = compress, 1 = decompress */
+    enum COMP_MODE comp_mode;
 };
 
 static int load_file (const char *fn, unsigned char **buf, size_t *size) {
@@ -235,26 +241,42 @@ static enum MHD_Result http_response (
         unsigned char *data = NULL;
         size_t size = 0;
 
-        if (cinfo->comp_mode
+        if (cinfo->comp_mode != DK_COMPRESS
         &&  cinfo->decomp_offset >= cinfo->input_size) {
             e = respond_message(connection, "Decompression offset is larger than input size.", MHD_HTTP_INTERNAL_SERVER_ERROR);
         }
         else {
-            e = (cinfo->comp_mode
-              ? dk_decompress_mem_to_mem
-              :   dk_compress_mem_to_mem)(
-                cinfo->comp_type,
-                &data,
-                &size,
-                cinfo->input      + cinfo->decomp_offset,
-                cinfo->input_size - cinfo->decomp_offset
-            );
+            if (cinfo->comp_mode == DK_CHECK_SIZE) {
+                e = dk_compressed_size_mem(
+                    cinfo->comp_type,
+                    cinfo->input      + cinfo->decomp_offset,
+                    cinfo->input_size - cinfo->decomp_offset,
+                    &size
+                );
+            }
+            else {
+                e = ((cinfo->comp_mode == DK_DECOMPRESS)
+                  ? dk_decompress_mem_to_mem
+                  :   dk_compress_mem_to_mem)(
+                    cinfo->comp_type,
+                    &data, &size,
+                    cinfo->input      + cinfo->decomp_offset,
+                    cinfo->input_size - cinfo->decomp_offset
+                );
+            }
 
             /* send the response, either an error or binary data */
-            if (e)
+            if (e) {
                 e = respond_message(connection, dk_get_error(e), MHD_HTTP_INTERNAL_SERVER_ERROR);
-            else
+            }
+            else if (cinfo->comp_mode == DK_CHECK_SIZE) {
+                char msg[32];
+                snprintf(msg, 32, "Compressed size is %zd bytes.\n", size);
+                e = respond_message(connection, msg, MHD_HTTP_OK);
+            }
+            else {
                 e = respond_binary(connection, data, size);
+            }
         }
 
         /* all done */

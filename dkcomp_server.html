@@ -95,7 +95,7 @@ function download (fn, response) {
 
 function generate_filename (form) {
     var fn = file.files[0].name.replace(/\.[^/.]+$/, "");
-    if (form.comp_mode.value == "0")
+    if (form.comp_mode.value == "2")
         fn += "_comp";
     else
         fn += "_" + Number(form.decomp_offset.value).toString(16).toUpperCase();
@@ -116,7 +116,7 @@ function server_exec (form) {
         return;
     }
 
-    if (form.comp_mode.value == "0")
+    if (form.comp_mode.value == "2")
         pmsg("Compressing...");
     else
         pmsg("Decompressing...");
@@ -124,7 +124,7 @@ function server_exec (form) {
     var req = new XMLHttpRequest();
     req.responseType = "blob";
     req.onload = function () {
-        if (this.status == 200) {
+        if (this.status == 200 && form.comp_mode.value != "0") {
             var fn = generate_filename(form);
             download(fn, this.response);
             console.log(this);
@@ -147,7 +147,7 @@ function toggle_disabled (type, el) {
         el.setAttribute("disabled", "disabled");
 }
 
-function switch_mode (type) {
+function enable_offsets (type) {
     toggle_disabled(type, document.getElementById("offset_hex"));
     toggle_disabled(type, document.getElementById("offset_dec"));
 }
@@ -160,9 +160,9 @@ function update_hex (dec) {
 
 function setup () {
 
-    /* disable the offset if decompress isn't selected */
-    if (document.getElementById("decompress").checked == false)
-        switch_mode(0);
+    /* disable the offset if compress is selected */
+    if (document.getElementById("compress").checked)
+        enable_offsets(0);
 
     /* disable the whole form until we're connected to the server */
     field_disable();
@@ -208,12 +208,16 @@ window.addEventListener("load", setup);
 </select>
 <br>
 
-<input accesskey="c" type="radio" name="comp_mode" id="compress"   value="0" onclick="switch_mode(0);" checked="checked" />
-<label for="compress">Compress</label>
+<input accesskey="c" type="radio" name="comp_mode" id="checksize" value="0" onclick="enable_offsets(true);" />
+<label for="checksize">Check Size</label>
 <br>
 
-<input accesskey="c" type="radio" name="comp_mode" id="decompress" value="1" onclick="switch_mode(1);" />
+<input accesskey="c" type="radio" name="comp_mode" id="decompress" value="1" onclick="enable_offsets(true);" />
 <label for="decompress">Decompress</label>
+<br>
+
+<input accesskey="c" type="radio" name="comp_mode" id="compress"   value="2" onclick="enable_offsets(false);" checked="checked" />
+<label for="compress">Compress</label>
 <br>
 
 <input accesskey="d" type="text" id="offset_dec" pattern="[0-9]+"       value="0" size="8" oninput="update_hex(this.value);" name="decomp_offset" />
