@@ -7,7 +7,7 @@
 #include <string.h>
 #include "dkcomp.h"
 
-static void check_size (const char *name) {
+static void check_size (const char *name, size_t compressed_size) {
     FILE *f = fopen(name, "rb");
     size_t len;
     if (f == NULL) {
@@ -23,7 +23,8 @@ static void check_size (const char *name) {
     }
     fclose(f);
 
-    printf("Output size is %zd bytes.\n", len);
+    printf("  Compressed size was %zd bytes.\n", compressed_size);
+    printf("Decompressed size  is %zd bytes.\n", len);
 }
 
 int main (int argc, char *argv[]) {
@@ -47,6 +48,7 @@ int main (int argc, char *argv[]) {
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
     int e, i, format = 0;
     size_t offset;
+    size_t compressed_size = 0;
 
     if (argc != 5) {
         puts("Usage: ./decomp FORMAT OUTPUT INPUT POSITION\n\n"
@@ -64,12 +66,17 @@ int main (int argc, char *argv[]) {
 
     offset = strtol(argv[4], NULL, 0);
 
+    if ((e = dk_compressed_size_file(formats[format].id, argv[3], offset, &compressed_size))) {
+        fprintf(stderr, "Error: %s.\n", dk_get_error(e));
+        return 1;
+    }
+
     if ((e = dk_decompress_file_to_file(formats[format].id, argv[2], argv[3], offset))) {
         fprintf(stderr, "Error: %s.\n", dk_get_error(e));
         return 1;
     }
 
-    check_size(argv[2]);
+    check_size(argv[2], compressed_size);
     printf("Done.\n");
 
     return 0;

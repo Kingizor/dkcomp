@@ -402,3 +402,85 @@ SHARED int dk_decompress_file_to_file (
     return 0;
 }
 
+
+
+
+
+/* size functions */
+/* use these to determine the compressed size of the compressed data */
+
+static void adjust_compressed_size (
+    enum DK_FORMAT decomp_type,
+    struct COMPRESSOR *dc,
+    size_t *compressed_size
+) {
+    if ((decomp_type == DKL_COMP && !dc->in.bitpos)
+    ||  dc->in.bitpos)
+        dc->in.pos += 1;
+    *compressed_size = dc->in.pos;
+}
+
+/* get the size of the compressed data */
+SHARED int dk_compressed_size_mem (
+    enum DK_FORMAT decomp_type,
+    unsigned char *input,
+    size_t input_size,
+    size_t *compressed_size
+) {
+    enum DK_ERROR e;
+    const struct COMP_TYPE *dk_decompress;
+    struct COMPRESSOR dc;
+    memset(&dc, 0, sizeof(struct COMPRESSOR));
+
+    if ((e = get_compressor(decomp_type, 0, 0, &dk_decompress))
+    ||  (e = check_input_mem(input)))
+        goto error;
+
+    dc.in.data   = input;
+    dc.in.length = input_size;
+    dc.out.limit = 1 << dk_decompress->size_limit;
+
+    if ((e = open_output_buffer(&dc.out.data, dc.out.limit))
+    ||  (e = dk_decompress->decomp(&dc)))
+        goto error;
+    free(dc.out.data); dc.out.data = NULL;
+
+    adjust_compressed_size(decomp_type, &dc, compressed_size);
+    return 0;
+error:
+    free(dc.out.data); dc.out.data = NULL;
+    return e;
+
+}
+
+SHARED int dk_compressed_size_file (
+    enum DK_FORMAT decomp_type,
+    const char *file_in,
+    size_t position,
+    size_t *compressed_size
+) {
+    enum DK_ERROR e;
+    const struct COMP_TYPE *dk_decompress;
+    struct COMPRESSOR dc;
+    memset(&dc, 0, sizeof(struct COMPRESSOR));
+
+    if ((e = get_compressor(decomp_type, 0, 0, &dk_decompress))
+    ||  (e = open_input_file(file_in, &dc.in.data, &dc.in.length, position, 0)))
+        goto error;
+
+    dc.out.limit = 1 << dk_decompress->size_limit;
+
+    if ((e = open_output_buffer(&dc.out.data, dc.out.limit))
+    ||  (e = dk_decompress->decomp(&dc)))
+        goto error;
+    free(dc. in.data); dc. in.data = NULL;
+    free(dc.out.data); dc.out.data = NULL;
+
+    adjust_compressed_size(decomp_type, &dc, compressed_size);
+    return 0;
+error:
+    free(dc. in.data); dc. in.data = NULL;
+    free(dc.out.data); dc.out.data = NULL;
+    return e;
+}
+

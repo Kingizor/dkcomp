@@ -93,6 +93,24 @@ int dk_decompress_file_to_file (
 );
 
 
+/* size functions */
+/* these report the size of the compressed data */
+int dk_compressed_size (
+    enum DK_FORMAT comp_type,
+    unsigned char *input,
+    size_t input_size,
+    size_t *compressed_size
+);
+int dk_compressed_size_file (
+    enum DK_FORMAT decomp_type,
+    const char *file_in,
+    size_t position,
+    size_t *compressed_size
+);
+
+
+
+
 /* DKL Huffman functions */
 int dkl_huffman_decode (
     unsigned char   *input, size_t    input_size,
