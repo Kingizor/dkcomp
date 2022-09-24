@@ -95,7 +95,7 @@ int dk_decompress_file_to_file (
 
 /* size functions */
 /* these report the size of the compressed data */
-int dk_compressed_size (
+int dk_compressed_size_mem (
     enum DK_FORMAT comp_type,
     unsigned char *input,
     size_t input_size,
