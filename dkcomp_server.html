@@ -94,7 +94,7 @@ function download (fn, response) {
 }
 
 function generate_filename (form) {
-    var fn = file.files[0].name.replace(/\.[^/.]+$/, "");
+    var fn = form.file.files[0].name.replace(/\.[^/.]+$/, "");
     if (form.comp_mode.value == "2")
         fn += "_comp";
     else
@@ -107,19 +107,19 @@ function server_exec (form) {
     if (!form.action)
         return;
 
-    var file = form.file;
-    if (file.files.length != 1) {
+    if (form.file.files.length != 1) {
         pmsg("No file selected.");
-        file.style.animation = "none";
-        file.offsetHeight;
-        file.style.animation = "notify 1s";
+        form.file.style.animation = "none";
+        form.file.offsetHeight;
+        form.file.style.animation = "notify 1s";
         return;
     }
 
-    if (form.comp_mode.value == "2")
-        pmsg("Compressing...");
-    else
-        pmsg("Decompressing...");
+    switch (form.comp_mode.value) {
+        case "0": { pmsg("Checking size..."); break; }
+        case "1": { pmsg("Decompressing..."); break; }
+        case "2": { pmsg("Compressing...");   break; }
+    }
 
     var req = new XMLHttpRequest();
     req.responseType = "blob";
@@ -208,7 +208,7 @@ window.addEventListener("load", setup);
 </select>
 <br>
 
-<input accesskey="c" type="radio" name="comp_mode" id="checksize" value="0" onclick="enable_offsets(true);" />
+<input accesskey="c" type="radio" name="comp_mode" id="checksize"  value="0" onclick="enable_offsets(true);" />
 <label for="checksize">Check Size</label>
 <br>
 
