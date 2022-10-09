@@ -19,10 +19,11 @@ enum PRG_STATE {
     PRG_QUIT
 };
 
-enum COMP_MODE {
+enum COMP_MODE { /* these must match the order in the html file */
     DK_CHECK_SIZE,
     DK_DECOMPRESS,
-    DK_COMPRESS
+    DK_COMPRESS,
+    DK_ERROR
 };
 
 struct CINFO {
@@ -30,7 +31,7 @@ struct CINFO {
     unsigned char *input;
     size_t    input_size;
     size_t decomp_offset;
-    enum DK_FORMAT comp_format;
+    enum DK_FORMAT comp_format; /* dkcomp.h */
     enum COMP_MODE comp_mode;
 };
 
@@ -93,7 +94,12 @@ static enum MHD_Result iterate_post (
     struct CINFO *cinfo = arg;
 
     if (!strcmp(key, "comp_mode")) {
-        cinfo->comp_mode = *data == '1';
+        switch (*data) {
+            case '0': { cinfo->comp_mode = DK_CHECK_SIZE; break; };
+            case '1': { cinfo->comp_mode = DK_DECOMPRESS; break; };
+            case '2': { cinfo->comp_mode = DK_COMPRESS;   break; };
+            default:  { cinfo->comp_mode = DK_ERROR;      break; };
+        }
         return MHD_YES;
     }
     else if (!strcmp(key, "comp_format")) {
@@ -246,23 +252,38 @@ static enum MHD_Result http_response (
             e = respond_message(connection, "Decompression offset is larger than input size.", MHD_HTTP_INTERNAL_SERVER_ERROR);
         }
         else {
-            if (cinfo->comp_mode == DK_CHECK_SIZE) {
-                e = dk_compressed_size_mem(
-                    cinfo->comp_format,
-                    cinfo->input      + cinfo->decomp_offset,
-                    cinfo->input_size - cinfo->decomp_offset,
-                    &size
-                );
-            }
-            else {
-                e = ((cinfo->comp_mode == DK_DECOMPRESS)
-                  ? dk_decompress_mem_to_mem
-                  :   dk_compress_mem_to_mem)(
-                    cinfo->comp_format,
-                    &data, &size,
-                    cinfo->input      + cinfo->decomp_offset,
-                    cinfo->input_size - cinfo->decomp_offset
-                );
+            switch (cinfo->comp_mode) {
+                case DK_CHECK_SIZE: {
+                    e = dk_compressed_size_mem(
+                        cinfo->comp_format,
+                        cinfo->input      + cinfo->decomp_offset,
+                        cinfo->input_size - cinfo->decomp_offset,
+                        &size
+                    );
+                    break;
+                }
+                case DK_DECOMPRESS: {
+                    e = dk_decompress_mem_to_mem(
+                        cinfo->comp_format,
+                        &data, &size,
+                        cinfo->input      + cinfo->decomp_offset,
+                        cinfo->input_size - cinfo->decomp_offset
+                    );
+                    break;
+                }
+                case DK_COMPRESS: {
+                    e = dk_compress_mem_to_mem(
+                        cinfo->comp_format,
+                        &data, &size,
+                        cinfo->input,
+                        cinfo->input_size
+                    );
+                    break;
+                }
+                default: {
+                    respond_message(connection, "Invalid mode specified.", MHD_HTTP_INTERNAL_SERVER_ERROR);
+                    return 1;
+                }
             }
 
             /* send the response, either an error or binary data */
