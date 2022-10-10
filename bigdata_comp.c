@@ -341,7 +341,8 @@ static int sort_count (const void *aa, const void *bb) {
     const struct DATA_CONSTANT *a = aa, *b = bb;
     return (a->count < b->count) ?  1
          : (a->count > b->count) ? -1
-         : (a->index < b->index); /* may affect compression ratio */
+         : (a->index < b->index) ?  1
+         : (a->index > b->index); /* may affect compression ratio */
 }
 
 static void init_constants (struct DATA_CONSTANT *dc, unsigned count) {

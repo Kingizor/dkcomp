@@ -132,7 +132,9 @@ struct VALC {
 static int valc_sort (const void *aa, const void *bb) {
     const struct VALC *a = aa, *b = bb;
     return (a->count > b->count) ? -1
-         : (a->count < b->count);
+         : (a->count < b->count) ?  1
+         : (a->index < b->index) ? -1
+         : (a->index > b->index);
 }
 
 static void generate_leaves (struct BIN *bin) {

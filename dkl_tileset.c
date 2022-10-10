@@ -182,7 +182,9 @@ struct VALC {
 int valc_sort (const void *aa, const void *bb) {
     const struct VALC *a = aa, *b = bb;
     return (a->count > b->count) ? -1
-         : (a->count < b->count);
+         : (a->count < b->count) ?  1
+         : (a->index < b->index) ? -1
+         : (a->index > b->index);
 }
 
 enum NODE_TYPE { CNODE, CLEAF };
