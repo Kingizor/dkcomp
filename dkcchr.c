@@ -161,7 +161,9 @@ static int sort_us (const void *aa, const void *bb) {
 static int sort_u16 (const void *aa, const void *bb) {
     const struct U16 *a = aa, *b = bb;
     return (a->count > b->count) ? -1 :
-           (a->count < b->count);
+           (a->count < b->count) ?  1 :
+           (a->index < b->index) ? -1 :
+           (a->index > b->index);
 }
 static void u16_count (
     struct BIN *bin,
