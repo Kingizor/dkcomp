@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2022 Kingizor
+ * Copyright (c) 2020-2024 Kingizor
  * dkcomp library - application programming interface */
 
 #include <stdio.h>
@@ -145,7 +145,8 @@ static const struct COMP_TYPE comp_table[] = {
     [   GBA_RLE_COMP] = { 24,    gbarle_compress,    gbarle_decompress },
     [GBA_HUFF50_COMP] = { 24, gbahuff50_compress, gbahuff50_decompress },
     [GBA_HUFF60_COMP] = { 24, gbahuff60_compress, gbahuff60_decompress },
-    [       GBA_COMP] = { 24,               NULL,       gba_decompress }
+    [       GBA_COMP] = { 24,               NULL,       gba_decompress },
+    [GB_PRINTER_COMP] = { 10, gbprinter_compress, gbprinter_decompress }
 };
 
 

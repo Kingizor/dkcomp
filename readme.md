@@ -17,6 +17,7 @@ Supported Formats
 * GBA Huffman 20 ...... GBA BIOS Huffman (type-20) (8-bit only)
 * GBA Huffman 50 ...... GBA Inline Huffman (type-50)
 * GBA Huffman 50 ...... GBA Inline Huffman (type-60)
+* GB Printer .......... Game Boy Printer
 
 Usage
 -----

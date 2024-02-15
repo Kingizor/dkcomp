@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2022 Kingizor
+ * Copyright (c) 2020-2024 Kingizor
  * Big Data Compression Library */
 
 #ifndef DK_COMP
@@ -29,6 +29,7 @@ GBA_HUFF20_COMP,
 GBA_HUFF50_COMP,
 GBA_HUFF60_COMP,
        GBA_COMP, /* auto-detect GBA */
+GB_PRINTER_COMP,
       COMP_LIMIT
 };
 

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2022 Kingizor
+ * Copyright (c) 2020-2024 Kingizor
  * dkcomp library */
 
 #ifndef DK_INTERNAL
@@ -108,6 +108,8 @@ int     gbalz77_compress (struct COMPRESSOR*);
 int    gbarle_decompress (struct COMPRESSOR*);
 int      gbarle_compress (struct COMPRESSOR*);
 int       gba_decompress (struct COMPRESSOR*);
+int   gbprinter_compress (struct COMPRESSOR*);
+int gbprinter_decompress (struct COMPRESSOR*);
 
 const char *dk_get_error (int);
 

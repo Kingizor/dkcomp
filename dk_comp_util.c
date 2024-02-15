@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2022 Kingizor
+ * Copyright (c) 2020-2024 Kingizor
  * dkcomp library - compression utility */
 
 #include <stdio.h>
@@ -32,17 +32,18 @@ int main (int argc, char *argv[]) {
         enum DK_FORMAT id;
         char *name;
     } formats[] = {
-        {        BD_COMP, "SNES DKC2/DKC3 Big Data"},
-        {        SD_COMP, "SNES DKC3 Small Data"   },
-        {    DKCCHR_COMP, "SNES DKC Tilesets"      },
-        {    DKCGBC_COMP, " GBC DKC Tilemaps"      },
-        {       DKL_COMP, " GB  DKL Tilemaps"      },
-        {  GBA_LZ77_COMP, " GBA BIOS LZ77 (10)"    },
-        {GBA_HUFF20_COMP, " GBA BIOS Huffman (20)" },
-        {   GBA_RLE_COMP, " GBA BIOS RLE (30)"     },
-        {GBA_HUFF50_COMP, " GBA Huffman (50)"      },
-        {GBA_HUFF60_COMP, " GBA Huffman (60)"      },
-        {       GBA_COMP, "     Reserved"          }
+        {        BD_COMP, "SNES DKC2/DKC3 Big Data"    },
+        {        SD_COMP, "SNES DKC3 Small Data"       },
+        {    DKCCHR_COMP, "SNES DKC Tilesets"          },
+        {    DKCGBC_COMP, " GBC DKC Tilemaps"          },
+        {       DKL_COMP, " GB  DKL/DKL2/DKL3 Tilemaps"},
+        {  GBA_LZ77_COMP, " GBA BIOS LZ77 (10)"        },
+        {GBA_HUFF20_COMP, " GBA BIOS Huffman (20)"     },
+        {   GBA_RLE_COMP, " GBA BIOS RLE (30)"         },
+        {GBA_HUFF50_COMP, " GBA Huffman (50)"          },
+        {GBA_HUFF60_COMP, " GBA Huffman (60)"          },
+        {       GBA_COMP, "     Reserved"              },
+        {GB_PRINTER_COMP, " GB  Printer"               }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
     int e, i, format = 0;
@@ -67,8 +68,6 @@ int main (int argc, char *argv[]) {
     }
 
     check_size(argv[2]);
-    printf("Done.\n");
-
     return 0;
 }
 

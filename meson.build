@@ -16,7 +16,8 @@ dkc_common = [
   'gbahuff60.c',
   'gba_lz77.c',
   'gba_rle.c',
-  'gba_auto.c'
+  'gba_auto.c',
+  'gb_printer.c'
 ]
 
 libdkcomp = shared_library(

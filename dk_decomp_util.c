@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2022 Kingizor
+ * Copyright (c) 2020-2024 Kingizor
  * dkcomp library - decompression utility */
 
 #include <stdio.h>
@@ -43,7 +43,8 @@ int main (int argc, char *argv[]) {
         {   GBA_RLE_COMP, " GBA BIOS RLE (30)"         },
         {GBA_HUFF50_COMP, " GBA Huffman (50)"          },
         {GBA_HUFF60_COMP, " GBA Huffman (60)"          },
-        {       GBA_COMP, " GBA BIOS Auto-Detect"      }
+        {       GBA_COMP, " GBA BIOS Auto-Detect"      },
+        {GB_PRINTER_COMP, " GB  Printer"               }
     };
     static const int size = sizeof(formats) / sizeof(struct DK_ID);
     int e, i, format = 0;
@@ -77,8 +78,6 @@ int main (int argc, char *argv[]) {
     }
 
     check_size(argv[2], compressed_size);
-    printf("Done.\n");
-
     return 0;
 }
 
