@@ -22,7 +22,6 @@ static int write_byte (struct COMPRESSOR *gb, unsigned char v) {
     return 0;
 }
 
-
 int gbprinter_decompress (struct COMPRESSOR *gb) {
     while (gb->in.pos < gb->in.length && gb->out.pos < 0x280) {
         int a, count;
@@ -45,120 +44,83 @@ int gbprinter_decompress (struct COMPRESSOR *gb) {
 }
 
 
-struct RLE { size_t pos, length; };
+struct PATH {
+    struct PATH *link;
+    size_t used;
+    int ncase;
+};
 
-static int next_rle (struct COMPRESSOR *gb, struct RLE *rle) {
-    struct FILE_STREAM *in = &gb->in;
-    int a = -1, b;
-    rle->pos = rle->length = 0;
-
-    if (in->pos >= in->length-1)
-        return 0;
-
-    /* find a match */
-    RB(b);
-    while (a != b && in->pos < in->length) {
-        a = b;
-        RB(b);
+static void test_case (struct PATH *steps, size_t i, size_t j, size_t used, int ncase) {
+    struct PATH *a = &steps[i], *b = &steps[j];
+    if (b->used  > a->used + used) {
+        b->used  = a->used + used;
+        b->link  = a;
+        b->ncase = ncase;
     }
-    if (in->pos == in->length)
-        return 0;
-
-    /* we found a match */
-    rle->pos = in->pos - 2;
-    rle->length = 1;
-
-    /* how many matches */
-    while (a == b && in->pos < in->length) {
-        rle->length++;
-        RB(a);
+}
+static void test_cases (struct COMPRESSOR *gb, struct PATH *steps) {
+    size_t i,j;
+    for (i = 0; i < gb->in.length; i++) {
+        for (j = i+1; j < i+0x81 && j <= gb->in.length; j++) { /* raw */
+            test_case(steps, i, j, 1+j-i, 0);
+        }
+        for (j = i+2; j < i+0x82 && j <= gb->in.length; j++) { /* RLE */
+            if (gb->in.data[i] != gb->in.data[j-1])
+                break;
+            test_case(steps, i, j, 2, 1);
+        }
     }
-    gb->in.pos--;
-    return 0;
 }
 
-static int write_raw (struct COMPRESSOR *gb, int n) {
-    WB(n-1);
-    while (n--) {
-        int a;
-        RB(a);
-        WB(a);
+static void reverse_path (struct COMPRESSOR *gb, struct PATH *steps) {
+    struct PATH *prev = &steps[gb->in.length];
+    struct PATH *step = prev->link;
+    while (step != NULL) {
+        struct PATH *next = step->link;
+        step->link = prev;
+        prev = step;
+        step = next;
     }
-    return 0;
 }
-
-static int write_compressed (struct COMPRESSOR *gb, struct RLE *rle) {
-    int a;
-    if (!rle->length || gb->in.pos != rle->pos)
-        return 0;
-    RB(a);
-    gb->in.pos = rle->pos + rle->length;
-    while (rle->length > 0x81) {
-        int count = 0x81;
-        if (rle->length == 0x82)
-            count--;
-        rle->length -= count;
-        WB(0x80|(count-2));
-        WB(a);
-    }
-    if (rle->length) {
-        WB(0x80|(rle->length-2));
-        WB(a);
-        rle->length = 0;
+static int write_output (struct COMPRESSOR *gb, struct PATH *steps) {
+    struct PATH *step = steps;
+    while (step != &steps[gb->in.length]) {
+        int a, count = step->link - step;
+        gb->in.pos = step - steps;
+        if (step->link->ncase) { /* rle */
+            WB(0x80 | (count-2));
+            RB(a); WB(a);
+        }
+        else { /* raw */
+            WB(count-1);
+            while (count--) { RB(a); WB(a); }
+        }
+        step = step->link;
     }
     return 0;
 }
 
 int gbprinter_compress (struct COMPRESSOR *gb) {
-
-    struct FILE_STREAM *in = &gb->in;
+    struct PATH *steps;
+    size_t i;
     int e;
 
     if (gb->in.length < 0x280) return DK_ERROR_INPUT_SMALL;
     if (gb->in.length > 0x280) return DK_ERROR_INPUT_LARGE;
 
-    while (in->pos < in->length) {
-        struct RLE b, c;
-        size_t pos = in->pos;
-        int count = 0;
+    steps = malloc((gb->in.length+1) * sizeof(struct PATH));
+    if (steps == NULL)
+        return DK_ERROR_ALLOC;
 
-        /* find the next two occurrences of RLE */
-        if (next_rle(gb, &b)
-        ||  next_rle(gb, &c))
-            return DK_ERROR_OOB_INPUT;
-
-        /* skip repeats unless b>2 or b..c && c>2 */
-        while (in->pos <= in->length
-         &&  b.length == 2
-         && (b.length + b.pos != c.pos || c.length == 2)
-         ) {
-            b.pos    = c.pos;
-            b.length = c.length;
-            in->pos = b.pos + b.length;
-            if (next_rle(gb, &c))
-                return DK_ERROR_OOB_INPUT;
-        }
-        in->pos = pos;
-
-        /* determine how many uncompressed bytes to write */
-        count += (in->pos <= b.pos) ? b.pos : in->length;
-        count -=  in->pos;
-
-        /* write any uncompressed data */
-        while (count > 0x80) {
-            count -= 0x80;
-            if ((e = write_raw(gb, 0x80)))
-                return e;
-        }
-        if (count && (e = write_raw(gb, count)))
-            return e;
-
-        /* write compressed data */
-        if ((e = write_compressed(gb, &b))
-        ||  (e = write_compressed(gb, &c)))
-            return e;
+    for (i = 0; i <= gb->in.length; i++) {
+        static const struct PATH p = { NULL, (size_t)-1, 0 };
+        steps[i] = p;
     }
-
-    return 0;
+    steps[0].used = 0;
+    test_cases  (gb, steps);
+    reverse_path(gb, steps);
+    e = write_output(gb, steps);
+    free(steps);
+    return e;
 }
 
