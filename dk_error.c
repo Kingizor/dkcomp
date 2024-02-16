@@ -36,7 +36,7 @@ static const char *dk_error_messages[] = {
     [DK_ERROR_SIG_WRONG]    = "Data has an incorrect signature byte",
 
     [DK_ERROR_COMP_NOT]     = "Unsupported compression type",
-    [DK_ERROR_DECOMP_NOT]   = "Unsupposted decompression type",
+    [DK_ERROR_DECOMP_NOT]   = "Unsupported decompression type",
 
     [DK_ERROR_SD_BAD_EXIT]  = "Encountered an exit condition in a case without an exit check",
     [DK_ERROR_LZ77_HIST]    = "Encountered an invalid history offset",
