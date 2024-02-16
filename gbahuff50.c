@@ -174,6 +174,8 @@ static void init_parent (struct NODE *n) {
         init_parent(n->dir.right);
 }
 
+#include <stdio.h>
+
 /* construct a tree from the leaf nodes */
 static int init_tree (struct BIN *bin) {
 
@@ -212,6 +214,9 @@ static int init_tree (struct BIN *bin) {
                             + nn->dir.right->count;
         }
     }
+    if (lqp < 3)
+        return DK_ERROR_HUFF_NO_LEAF;
+
     init_parent(bin->root);
 
     bin->node_count = ts;
