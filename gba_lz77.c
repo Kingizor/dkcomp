@@ -20,18 +20,19 @@ static int write_byte (struct COMPRESSOR *gba, unsigned char v) {
 
 int gbalz77_decompress (struct COMPRESSOR *gba) {
     size_t output_size;
+    struct FILE_STREAM *in = &gba->in, *out = &gba->out;
 
-    if (gba->in.length < 5)
+    if (in->length < 5)
         return DK_ERROR_INPUT_SMALL;
 
-    if ((gba->in.data[0] & 0xF0) != 0x10)
+    if ((in->data[0] & 0xF0) != 0x10)
         return DK_ERROR_SIG_WRONG;
 
-    output_size = (gba->in.data[3] << 16) | gba->in.data[1]
-                | (gba->in.data[2] <<  8);
-    gba->in.pos += 4;
+    output_size = (in->data[3] << 16) | in->data[1]
+                | (in->data[2] <<  8);
+    in->pos += 4;
 
-    while (gba->out.pos < output_size) {
+    while (out->pos < output_size) {
         int blocks, i;
         if ((blocks = read_byte(gba)) < 0)
             return DK_ERROR_OOB_INPUT;
@@ -46,10 +47,10 @@ int gbalz77_decompress (struct COMPRESSOR *gba) {
                     return DK_ERROR_OOB_INPUT;
                 count  =  (v1 >> 4) + 3;
                 outpos = ((v1 & 15) << 8) | v2;
-                if (outpos > gba->out.pos-1)
+                if (!out->pos || outpos > out->pos-1)
                     return DK_ERROR_LZ77_HIST;
                 while (count--) {
-                    if (write_byte(gba, gba->out.data[gba->out.pos-outpos-1]))
+                    if (write_byte(gba, out->data[out->pos-outpos-1]))
                         return DK_ERROR_OOB_OUTPUT_W;
                 }
             }
@@ -57,7 +58,7 @@ int gbalz77_decompress (struct COMPRESSOR *gba) {
                 if (write_byte(gba, v1))
                     return DK_ERROR_OOB_OUTPUT_W;
             }
-            if (gba->out.pos == output_size)
+            if (out->pos == output_size)
                 break;
         }
     }
