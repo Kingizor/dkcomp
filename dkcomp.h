@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2024 Kingizor
+ * Copyright (c) 2020-2025 Kingizor
  * Big Data Compression Library */
 
 #ifndef DK_COMP
@@ -16,6 +16,18 @@
    data necessary for the provided output pointer, which must be freed
    manually by the user.
 */
+
+#if defined(__GNUC__) || defined(__clang__)
+  #define SHARED __attribute__ ((visibility ("default")))
+#elif defined(_MSC_VER)
+  #ifdef BUILD_DKCOMP
+    #define SHARED __declspec(dllexport)
+  #else
+    #define SHARED __declspec(dllimport)
+  #endif
+#else
+  #define SHARED
+#endif
 
 enum DK_FORMAT {
         BD_COMP,
@@ -35,29 +47,29 @@ GB_PRINTER_COMP,
 
 
 /* Error reporting */
-const char *dk_get_error (int);
+SHARED const char *dk_get_error (int);
 
 
 /* Compression functions */
-int dk_compress_mem_to_mem (
+SHARED int dk_compress_mem_to_mem (
     enum DK_FORMAT,
     unsigned char **output,
     size_t *output_size,
     unsigned char *input,
     size_t input_size
 );
-int dk_compress_mem_to_file (
+SHARED int dk_compress_mem_to_file (
     enum DK_FORMAT,
     const char *file_out,
     unsigned char *input,
     size_t input_size
 );
-int dk_compress_file_to_file (
+SHARED int dk_compress_file_to_file (
     enum DK_FORMAT,
     const char *file_out,
     const char *file_in
 );
-int dk_compress_file_to_mem (
+SHARED int dk_compress_file_to_mem (
     enum DK_FORMAT,
     unsigned char **output,
     size_t *output_size,
@@ -66,27 +78,27 @@ int dk_compress_file_to_mem (
 
 
 /* Decompression functions */
-int dk_decompress_mem_to_mem (
+SHARED int dk_decompress_mem_to_mem (
     enum DK_FORMAT,
     unsigned char **output,
     size_t *output_size,
     unsigned char *input,
     size_t input_size
 );
-int dk_decompress_mem_to_file (
+SHARED int dk_decompress_mem_to_file (
     enum DK_FORMAT,
     const char *file_out,
     unsigned char *input,
     size_t input_size
 );
-int dk_decompress_file_to_mem (
+SHARED int dk_decompress_file_to_mem (
     enum DK_FORMAT,
     unsigned char **output,
     size_t *output_size,
     const char *file_in,
     size_t file_position
 );
-int dk_decompress_file_to_file (
+SHARED int dk_decompress_file_to_file (
     enum DK_FORMAT,
     const char *file_out,
     const char *file_in,
@@ -96,13 +108,13 @@ int dk_decompress_file_to_file (
 
 /* size functions */
 /* these report the size of the compressed data */
-int dk_compressed_size_mem (
+SHARED int dk_compressed_size_mem (
     enum DK_FORMAT comp_type,
     unsigned char *input,
     size_t input_size,
     size_t *compressed_size
 );
-int dk_compressed_size_file (
+SHARED int dk_compressed_size_file (
     enum DK_FORMAT decomp_type,
     const char *file_in,
     size_t position,

@@ -61,7 +61,7 @@ static const char *dk_error_messages[] = {
     [DK_ERROR_INVALID]      = "An invalid error code was passed to this function"
 };
 
-SHARED const char *dk_get_error (int error_code) {
+const char *dk_get_error (int error_code) {
     if (error_code < 0 || error_code >= DK_ERROR_LIMIT)
         error_code = DK_ERROR_INVALID;
     return dk_error_messages[error_code];

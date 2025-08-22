@@ -1,19 +1,13 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2024 Kingizor
+ * Copyright (c) 2020-2025 Kingizor
  * dkcomp library */
 
 #ifndef DK_INTERNAL
 #define DK_INTERNAL
 
 #include <stddef.h>
-
-#if defined(__GNUC__) || defined(__clang__)
-#define SHARED __attribute__ ((visibility ("default")))
-#elif defined(_MSC_VER)
-#define SHARED __declspec(dllexport)
-#else
-#define SHARED
-#endif
+#define BUILD_DKCOMP
+#include "dkcomp.h"
 
 enum DK_ERROR {
     DK_SUCCESS,

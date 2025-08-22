@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2024 Kingizor
+ * Copyright (c) 2020-2025 Kingizor
  * dkcomp library - application programming interface */
 
 #include <stdio.h>
@@ -182,7 +182,7 @@ static int get_compressor (
 
 /* Compression handlers */
 
-SHARED int dk_compress_mem_to_mem (
+int dk_compress_mem_to_mem (
     enum DK_FORMAT comp_type,
     unsigned char **output,
     size_t *output_size,
@@ -221,7 +221,7 @@ error:
     return e;
 }
 
-SHARED int dk_compress_file_to_mem (
+int dk_compress_file_to_mem (
     enum DK_FORMAT comp_type,
     unsigned char **output,
     size_t *output_size,
@@ -255,7 +255,7 @@ error:
     return e;
 }
 
-SHARED int dk_compress_mem_to_file (
+int dk_compress_mem_to_file (
     enum DK_FORMAT comp_type,
     const char *file_out,
     unsigned char *input,
@@ -274,7 +274,7 @@ SHARED int dk_compress_mem_to_file (
     return 0;
 }
 
-SHARED int dk_compress_file_to_file (
+int dk_compress_file_to_file (
     enum DK_FORMAT comp_type,
     const char *file_out,
     const char *file_in
@@ -298,7 +298,7 @@ SHARED int dk_compress_file_to_file (
 
 /* Decompression handlers */
 
-SHARED int dk_decompress_mem_to_mem (
+int dk_decompress_mem_to_mem (
     enum DK_FORMAT decomp_type,
     unsigned char **output,
     size_t *output_size,
@@ -332,7 +332,7 @@ error:
     return e;
 }
 
-SHARED int dk_decompress_file_to_mem (
+int dk_decompress_file_to_mem (
     enum DK_FORMAT decomp_type,
     unsigned char **output,
     size_t *output_size,
@@ -365,7 +365,7 @@ error:
     return e;
 }
 
-SHARED int dk_decompress_mem_to_file (
+int dk_decompress_mem_to_file (
     enum DK_FORMAT decomp_type,
     const char *file_out,
     unsigned char *input,
@@ -384,7 +384,7 @@ SHARED int dk_decompress_mem_to_file (
     return 0;
 }
 
-SHARED int dk_decompress_file_to_file (
+int dk_decompress_file_to_file (
     enum DK_FORMAT decomp_type,
     const char *file_out,
     const char *file_in,
@@ -422,7 +422,7 @@ static void adjust_compressed_size (
 }
 
 /* get the size of the compressed data */
-SHARED int dk_compressed_size_mem (
+int dk_compressed_size_mem (
     enum DK_FORMAT decomp_type,
     unsigned char *input,
     size_t input_size,
@@ -454,7 +454,7 @@ error:
 
 }
 
-SHARED int dk_compressed_size_file (
+int dk_compressed_size_file (
     enum DK_FORMAT decomp_type,
     const char *file_in,
     size_t position,
