@@ -28,17 +28,17 @@ libdkcomp = shared_library(
 depdkcomp = declare_dependency(link_with: libdkcomp, include_directories: '.')
 
 # standalone utilities
-executable(  'comp',   'dk_comp_util.c', link_with: libdkcomp)
-executable('decomp', 'dk_decomp_util.c', link_with: libdkcomp)
+executable(  'comp',   'comp_util.c', link_with: libdkcomp)
+executable('decomp', 'decomp_util.c', link_with: libdkcomp)
 
 # web version
 mhttpd = dependency('libmicrohttpd', required: false)
 if mhttpd.found()
   html = configure_file(
-     input: 'dkcomp_server.html',
-    output: 'dkcomp_server.html',
+     input: 'server.html',
+    output: 'server.html',
       copy:  true
   )
-  executable('dkcomp_server', 'dkcomp_server.c', link_with: libdkcomp, dependencies: mhttpd)
+  executable('server', 'server.c', link_with: libdkcomp, dependencies: mhttpd)
 endif
 

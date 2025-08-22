@@ -318,9 +318,9 @@ static enum MHD_Result http_response (
         !strcmp(url, "/")
     ||  !strcmp(url, "/default.html")
     ||  !strcmp(url, "/index.html")
-    ||  !strcmp(url, "/dkcomp_server.html")
+    ||  !strcmp(url, "/server.html")
     ) {
-        e = respond_file(connection, "dkcomp_server.html");
+        e = respond_file(connection, "server.html");
     }
     else {
         e = respond_message(connection,
