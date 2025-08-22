@@ -42,6 +42,6 @@ if(MHD_FOUND)
     ${CMAKE_CURRENT_BINARY_DIR}/server.html
     COPYONLY
   )
-  target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR})
+  target_include_directories(server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(server PRIVATE dkcomp microhttpd)
 endif()
