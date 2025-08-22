@@ -38,8 +38,8 @@ endif()
 if(MHD_FOUND)
   add_executable(server server.c)
   configure_file(
-    ${CMAKE_SOURCE_DIR}/server.html
-    ${CMAKE_BINARY_DIR}/server.html
+    ${CMAKE_CURRENT_SOURCE_DIR}/server.html
+    ${CMAKE_CURRENT_BINARY_DIR}/server.html
     COPYONLY
   )
   target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR})
