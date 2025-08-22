@@ -25,7 +25,7 @@ static int read_byte (unsigned char *data, size_t size, size_t pos) {
 /* A single Huffman table for all data is stored at 3D00-3FFF */
 /*  left nodes in 3Exx with types at 3Fxx.7 */
 /* right nodes in 3Dxx with types at 3Fxx.3 */
-SHARED int dkl_huffman_decode (
+int dkl_huffman_decode (
     unsigned char   *input, size_t   insize,
     unsigned char **output, size_t *outsize,
     unsigned char    *tree, /* &rom[0x3D00] */
@@ -133,7 +133,7 @@ static int write_bit (
 }
 
 /* encode tile data using an existing tree */
-SHARED int dkl_huffman_encode (
+int dkl_huffman_encode (
     unsigned char  *input,  size_t   insize,
     unsigned char **output, size_t *outsize,
     unsigned char  *tree
@@ -310,7 +310,7 @@ static void generate_dkltree (struct BIN *bin, struct NODE *node, unsigned char 
  * 1) decompress all the huffman data and concatenate it
  * 2) pass the concatenated data to this function to generate a tree
  * 3) compress the individual data segments using the new tree */
-SHARED int dkl_huffman_tree (
+int dkl_huffman_tree (
     unsigned char *input,
     size_t insize,
     unsigned char **tree
