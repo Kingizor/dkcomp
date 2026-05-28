@@ -1,14 +1,11 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2020-2022 Kingizor
+ * Copyright (c) 2020-2026 Kingizor
  * dkcomp library - SNES DKC2/DKC3 big data compressor */
 
 #include <stdlib.h>
 #include <string.h>
 #include "dk_internal.h"
-
-/* use the better constant picking function */
-#define COMPLEX_CONSTANTS
-
+#define HASH_SIZE 13
 
 /* I/O functions */
 
@@ -37,7 +34,6 @@ static int write_word (struct COMPRESSOR *dk, unsigned val) {
 }
 
 
-
 /* some data structures */
 
 struct PATH {
@@ -49,6 +45,8 @@ struct PATH {
 struct BIN {
     struct COMPRESSOR *dk;
     struct PATH *steps;
+    unsigned short *root; /* hash table */
+    unsigned short *link;
 };
 
 
@@ -74,6 +72,32 @@ static void reverse_path (struct BIN *bin) {
 }
 
 
+/* hashing functions for window testing */
+
+static unsigned short hash3 (unsigned char *data, int i) {
+    unsigned v = data[i] | (data[i+1] << 8) | (data[i+2] << 16);
+    v = ((v * 2654435761u) >> (32 - HASH_SIZE)) & 0xFFFF;
+    return (v == 0xFFFF) ? 0 : v;
+}
+static int hash_triplets (struct BIN *bin) {
+    size_t i;
+    size_t rootlen = sizeof(unsigned short) * (1 << HASH_SIZE);
+    size_t linklen = sizeof(unsigned short) * bin->dk->in.length;
+    bin->root = malloc(rootlen);
+    bin->link = malloc(linklen);
+    if (bin->root == NULL || bin->link == NULL) {
+        free(bin->root);
+        return DK_ERROR_ALLOC;
+    }
+    memset(bin->root, -1, rootlen);
+    memset(bin->link, -1, linklen);
+    for (i = 0; i < bin->dk->in.length-3; i++) {
+        unsigned short hash = hash3(bin->dk->in.data, i);
+        bin->link[i] = bin->root[hash];
+        bin->root[hash] = i;
+    }
+    return 0;
+}
 
 
 /* constant search functions */
@@ -99,8 +123,6 @@ static int in_wlut (struct COMPRESSOR *dk, unsigned short val) {
             return 5+2*i;
     return 0;
 }
-
-
 
 
 /* case scanning */
@@ -206,12 +228,10 @@ static void test_copy (struct BIN *bin, size_t i) {
         step[2] = p;
 }
 
-static void test_win (struct BIN *bin, size_t i) {
+static void test_word (struct BIN *bin, size_t i) {
     struct PATH *step = &bin->steps[i];
     unsigned char *data = bin->dk->in.data;
-    unsigned short count = 0;
     size_t  j = 0;
-    size_t lo = 0;
 
     /* 9 (recent word) */
     if ((i+1) < bin->dk->in.length) {
@@ -228,56 +248,54 @@ static void test_win (struct BIN *bin, size_t i) {
             }
         }
     }
+}
+
+static void test_win (struct BIN *bin, size_t i) {
+    struct PATH *step = &bin->steps[i];
+    unsigned char *data = bin->dk->in.data;
+    unsigned short point;
 
     /* (3-18 bytes from 8/12/16 bit window) */
-    if (i < 3)
+    if (i < 3 || i > bin->dk->in.length-3)
         return;
 
-    /* input size should never be this large anyway */
-    if  (i > (1 << 16))
-    lo = i - (1 << 16);
+    point = bin->root[hash3(bin->dk->in.data, i)];
 
-    for (j = i-3; j > lo && j < i; j--) {
-        unsigned char *a = &data[i];
-        unsigned char *b = &data[j];
-        size_t limit   = 18;
-        size_t matched = 0;
-        if (limit > i-j)
-            limit = i-j;
+    for (; point != 0xFFFF; point = bin->link[point]) {
+        unsigned limit = 18;
+        unsigned matched = 0;
+        if (point >= i-3)
+            continue;
+        if (limit > i-point)
+            limit = i-point;
         if (limit > bin->dk->in.length-i)
             limit = bin->dk->in.length-i;
+        while (matched < limit &&
+                data[i+matched] ==
+                data[point+matched])
+            matched++;
 
-        for (matched = 0; matched < limit; matched++)
-            if (*a++ != *b++)
-                break;
-
-        if (count >= matched)
-            continue;
-        count = matched;
-
+        /* do cases each time */
         for (; matched >= 3; matched--) {
-            struct PATH p = { step, step->used, 10, 0 };
-            size_t pos = i - j;
+            size_t pos = i - point;
+            struct PATH p = { step, step->used, 10, pos };
             if (pos < (256+matched)) {
+                p.used +=  4;
                 p.ncase = 10;
-                p.used += 4;
-                p.arg   = i - (j + matched);
+                p.arg  -= matched;
             }
             else if (pos > 258 && pos <= (4095+259)) {
+                p.used +=  5;
                 p.ncase = 11;
-                p.used += 5;
-                p.arg   = i - (j + 0x103);
+                p.arg  -= 0x103;
             }
             else {
+                p.used +=  6;
                 p.ncase = 12;
-                p.used += 6;
-                p.arg   = i - j;
             }
             if (p.used < step[matched].used)
                 step[matched] = p;
         }
-        if (matched == limit)
-            break;
     }
 }
 
@@ -288,25 +306,23 @@ static void test_cases (struct BIN *bin) {
         test_constants(bin, i);
         test_repeat   (bin, i);
         test_copy     (bin, i);
+        test_word     (bin, i);
         test_win      (bin, i);
         test_rle      (bin, i);
     }
 }
 
-#if defined(COMPLEX_CONSTANTS)
 static void test_nc_cases (struct BIN *bin) {
     struct COMPRESSOR *dk = bin->dk;
     size_t i;
     for (i = 0; i < dk->in.length; i++) {
         test_repeat(bin, i);
         test_copy  (bin, i);
+        test_word  (bin, i);
         test_win   (bin, i);
         test_rle   (bin, i);
     }
 }
-#endif
-
-
 
 
 /* constant scanning */
@@ -425,16 +441,8 @@ static void filter_constants (struct CLUT *clut) {
 }
 
 
-/* we have two methods for picking constants: */
-/*  simple - iterate over all of the input data */
-/* complex - iterate over data that can only be handled by copy cases */
-/* the latter is slower but typically results in better compression */
-
-#if defined(COMPLEX_CONSTANTS)
-
-#define choose_constants complex_constants
-
-static int complex_constants (struct BIN *bin) {
+/* iterate over data that can only be handled by copy cases */
+static int choose_constants (struct BIN *bin) {
     struct PATH *step = bin->steps;
     struct CLUT clut;
     enum DK_ERROR e;
@@ -476,29 +484,6 @@ static int complex_constants (struct BIN *bin) {
     free(clut.rle);
     return 0;
 }
-
-#else
-
-#define choose_constants simple_constants
-
-static int simple_constants (struct BIN *bin) {
-    struct CLUT clut;
-    enum DK_ERROR e;
-    if ((e = init_constant_lut(&clut)))
-        return e;
-    constant_count_rle   (bin->dk, &clut, 0, bin->dk->in.length);
-    constant_count_single(bin->dk, &clut, 0, bin->dk->in.length);
-    filter_constants(&clut);
-    if (write_constants(bin->dk, &clut)) {
-        free(clut.rle);
-        return DK_ERROR_OOB_OUTPUT_W;
-    }
-    free(clut.rle);
-    return 0;
-}
-
-#endif
-
 
 
 /* data encoding */
@@ -631,7 +616,7 @@ static int write_output (struct BIN *bin) {
 
 int bd_compress (struct COMPRESSOR *dk) {
     struct PATH *steps = malloc((dk->in.length+1) * sizeof(struct PATH));
-    struct BIN bin = { dk, steps };
+    struct BIN bin = { dk, steps, NULL, NULL };
     enum DK_ERROR e;
 
     if (steps == NULL)
@@ -639,7 +624,8 @@ int bd_compress (struct COMPRESSOR *dk) {
 
     clear_path(&bin);
 
-    if ((e = choose_constants(&bin))) {
+    if ((e =    hash_triplets(&bin))
+    ||  (e = choose_constants(&bin))) {
         free(steps);
         return e;
     }
@@ -649,10 +635,13 @@ int bd_compress (struct COMPRESSOR *dk) {
 
     if ((e = write_output(&bin))) {
         free(steps);
+        free(bin.root);
+        free(bin.link);
         return e;
     }
 
     free(steps);
+    free(bin.root);
+    free(bin.link);
     return 0;
 }
-
