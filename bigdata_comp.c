@@ -262,40 +262,40 @@ static void test_win (struct BIN *bin, size_t i) {
     point = bin->root[hash3(bin->dk->in.data, i)];
 
     for (; point != 0xFFFF; point = bin->link[point]) {
+        struct PATH p = { step, step->used, 0, 0 };
         unsigned limit = 18;
-        unsigned matched = 0;
+        unsigned m, matched = 0;
         if (point >= i-3)
             continue;
         if (limit > i-point)
             limit = i-point;
         if (limit > bin->dk->in.length-i)
             limit = bin->dk->in.length-i;
-        while (matched < limit &&
-                data[i+matched] ==
-                data[point+matched])
+        while (matched < limit && data[i+matched] == data[point+matched])
             matched++;
 
         /* do cases each time */
-        for (; matched >= 3; matched--) {
-            size_t pos = i - point;
-            struct PATH p = { step, step->used, 10, pos };
-            if (pos < (256+matched)) {
-                p.used +=  4;
+        for (m = matched; m >= 3; m--) {
+            p.arg = i - point;
+            if (p.arg < (256+m)) {
+                p.used  = step->used + 4;
                 p.ncase = 10;
-                p.arg  -= matched;
+                p.arg  -= m;
             }
-            else if (pos > 258 && pos <= (4095+259)) {
-                p.used +=  5;
+            else if (p.arg > 258 && p.arg <= (4095+259)) {
+                p.used  = step->used + 5;
                 p.ncase = 11;
                 p.arg  -= 0x103;
             }
             else {
-                p.used +=  6;
+                p.used  = step->used + 6;
                 p.ncase = 12;
             }
-            if (p.used < step[matched].used)
-                step[matched] = p;
+            if (p.used < step[m].used)
+                step[m] = p;
         }
+        if (p.ncase == 10 && matched == 18)
+            return;
     }
 }
 
