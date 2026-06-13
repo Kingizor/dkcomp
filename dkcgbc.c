@@ -277,16 +277,6 @@ int dkcgbc_compress (struct COMPRESSOR *gbc) {
 
     reverse_path(&bin);
 
-    struct PATH *step = steps;
-    while (step != &bin.steps[gbc->in.length]) {
-        struct PATH *next = step->link;
-        int count;
-            count = next->nc.count;
-            if (next->nc.mode == 1)
-                count += 64;
-        step = step->link;
-    }
-
     e = write_data(&bin);
 
     free(steps);
