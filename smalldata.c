@@ -276,7 +276,7 @@ static int encode_main (struct COMPRESSOR *sd) {
             /* Read next word */
             if ((w2 = read_word(sd, addr)) < 0)
                 return DK_ERROR_OOB_INPUT;
-            w2 &= 0x3FFF;
+            w2 &= 0x3FF;
 
             /* Determine the pattern */
             signed short diff = w2 - w1;
