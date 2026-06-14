@@ -31,9 +31,11 @@ Note: The DKL Huffman tileset format requires a few extra parameters, so those f
 Build Instructions
 ------------------
 
-The project is written entirely in C, so a suitable C compiler is required. Just download the repository and build with [meson](https://mesonbuild.com/Quick-guide.html).
+The project is written entirely in C, so a suitable C compiler is required. Just download the repository and build with make or [meson](https://mesonbuild.com/Quick-guide.html).
 
 The library and CLI utilities have no dependencies. The web interface program requires libmicrohttpd.
+
+The WebAssembly version can be built using clang and a suitable linker. Required libc functions are provided, so there is no dependency on an external libc.
 
 License
 -------

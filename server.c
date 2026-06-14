@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <microhttpd.h>
-#include <dkcomp.h>
+#include "dkcomp.h"
 
 enum PRG_STATE {
     PRG_RUNNING,
