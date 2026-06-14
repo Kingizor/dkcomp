@@ -3,6 +3,7 @@
  * dkcomp library - malloc and friends for WebAssembly */
 
 #include <stddef.h>
+#include <stdatomic.h>
 
 void *memcpy (void *restrict dest, const void *restrict src, size_t n) {
     return __builtin_memcpy(dest, src, n);
@@ -36,11 +37,19 @@ struct MDAT {
         void *end;
     } entry[MDAT_LIMIT];
     int active;
+    int lock;
 };
 #define MDAT_TAILS(X) (sizeof(struct MDAT_ENTRY) * (mdat.active - (X - mdat.entry)))
 
 static struct MDAT mdat = {0};
 extern char __heap_base[];
+
+static void mdat_lock (void) {
+    while (__atomic_exchange_n(&mdat.lock, 1, __ATOMIC_ACQUIRE));
+}
+static void mdat_unlock (void) {
+    __atomic_store_n(&mdat.lock, 0, __ATOMIC_RELEASE);
+}
 
 static int sort_mdat (const void *aa, const void *bb) {
     const struct MDAT_ENTRY *a = aa, *b = bb;
@@ -52,9 +61,8 @@ void *malloc (size_t size) {
     void *start, *end = (char*)(__builtin_wasm_memory_size(0) << 16);
     int i;
 
-    if (mdat.active == MDAT_LIMIT)
-        return NULL;
-
+    mdat_lock();
+    if (mdat.active == MDAT_LIMIT) { mdat_unlock(); return NULL; }
     if (size & 7) size += 8 - (size & 7);
 
     /* check if any spaces contain enough reusable space */
@@ -65,25 +73,25 @@ void *malloc (size_t size) {
             __builtin_memmove(b+1, b, MDAT_TAILS(b));
             b->start = a->end;
             b->end   = a->end + size;
+            mdat_unlock();
             return b->start;
         }
     }
 
     /* check if heap contains enough space */
     start = (mdat.active) ? mdat.entry[mdat.active-1].end : __heap_base;
-    if ((size_t)(end - start) < size)
-        return NULL;
+    if ((size_t)(end - start) < size) { mdat_unlock(); return NULL; }
 
     mdat.entry[mdat.active].start = start;
     mdat.entry[mdat.active].end   = start + size;
     mdat.active++;
+    mdat_unlock();
     return start;
 }
 
 void *calloc (size_t n, size_t size) {
     void *data = malloc(n*size);
-    if (data == NULL) return NULL;
-    __builtin_memset(data, 0, n*size);
+    if (data != NULL) __builtin_memset(data, 0, n*size);
     return data;
 }
 
@@ -91,8 +99,10 @@ void free (void *ptr) {
     struct MDAT_ENTRY en = { ptr, NULL };
     struct MDAT_ENTRY *target;
     if (ptr    == NULL) return;
+    mdat_lock();
     target = bsearch(&en, mdat.entry, mdat.active, sizeof(struct MDAT_ENTRY), sort_mdat);
-    if (target == NULL) return;
+    if (target == NULL) { mdat_unlock(); return; }
     __builtin_memmove(target, target+1, MDAT_TAILS(target));
     mdat.active--;
+    mdat_unlock();
 }
