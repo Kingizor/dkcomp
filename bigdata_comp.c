@@ -2,8 +2,6 @@
  * Copyright (c) 2020-2026 Kingizor
  * dkcomp library - SNES DKC2/DKC3 big data compressor */
 
-#include <stdlib.h>
-#include <string.h>
 #include "dk_internal.h"
 #define HASH_SIZE 13
 

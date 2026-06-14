@@ -1,0 +1,269 @@
+<!--
+SPDX-License-Identifier: MIT
+Copyright (c) 2022-2026 Kingizor
+dkcomp library - webassembly frontend
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+<title>dkcomp - WebAssembly interface</title>
+<style type="text/css">
+<!--
+
+#output {
+  max-height: 200px;
+  overflow-y: scroll;
+  padding: 5px;
+  display: inline-block;
+}
+
+@keyframes notify {
+    from { background-color: #F88; }
+    to   { background-color: initial; }
+}
+
+-->
+</style>
+<script type="text/javascript">
+<!--
+
+let dkcomp;
+let file;
+
+async function init_dkcomp () {
+  const { instance: { exports: wasm } } =
+    await WebAssembly.instantiateStreaming(fetch("dkcomp.wasm"));
+  dkcomp = wasm;
+  dkcomp.memory.grow(((1 << 26)|(1 << 23)) >> 16); // ~72MB
+}
+
+function pmsg (msg) {
+    var span = document.getElementById("output");
+    span.innerHTML += msg + "<br>";
+    span.scrollTop = span.scrollHeight;
+}
+function clear_output () {
+    document.getElementById("output").innerHTML = "";
+}
+function toggle_disabled (type, el) {
+    if (type)
+        el.removeAttribute("disabled");
+    else
+        el.setAttribute("disabled", "disabled");
+}
+function enable_offsets (type) {
+    toggle_disabled(type, document.getElementById("offset_hex"));
+    toggle_disabled(type, document.getElementById("offset_dec"));
+}
+function update_dec (hex) {
+    document.getElementById("offset_dec").value = parseInt(hex, 16);
+}
+function update_hex (dec) {
+    document.getElementById("offset_hex").value = parseInt(dec, 10).toString(16).toUpperCase();
+}
+
+function download (fn, response) {
+    var link = document.createElement("a");
+    var blob = new Blob([response], {type:"application/octet-stream"});
+    var data = URL.createObjectURL(blob);
+    link.setAttribute("href", data);
+    link.setAttribute("download", fn);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(data);
+}
+
+function generate_filename (form) {
+    var fn = form.file.files[0].name.replace(/\.[^/.]+$/, "");
+    if (form.comp_mode.value == "2")
+        fn += "_comp";
+    else
+        fn += "_" + Number(form.offset_dec.value).toString(16).toUpperCase();
+    fn += ".bin";
+    return fn;
+}
+
+function pad (s) {
+  s = s.toString(16).toUpperCase();
+  while (s.length < 2) s = "0" + s;
+  return s;
+}
+function decode_cstring (buf) {
+  var str = "";
+  var i = 0;
+  while (buf[i]) {
+    str += `${pad(buf[i])} `;
+    if ((i & 15) == 15) str += '\n';
+    i++;
+  }
+  return str;
+}
+
+async function load_file (file) {
+  /* allocate input */
+  const inptr = dkcomp.load_input_data(file.size);
+  if (inptr == null) {
+    pmsg("Failed to allocate memory for input file.");
+    return true;
+  }
+
+  /* copy input file data to C buffer */
+  const inbuf = new Uint8Array(dkcomp.memory.buffer, inptr, file.size);
+  const data  = new Uint8Array(await file.arrayBuffer());
+  inbuf.set(data);
+  dkcomp.set_input_size(file.size);
+  pmsg(`Loaded file "${file.name}".`);
+  return false;
+}
+
+async function dkcomp_exec (format, dkcomp_function, addr) {
+  const file_size = dkcomp.get_input_size();
+  if (addr >= file_size) {
+    pmsg(`Input address is greater than file size.`);
+    return false;
+  }
+  dkcomp.set_input_pos(addr);
+
+  /* execute desired function */
+  const e = dkcomp_function(format);
+  if (e) {
+    const error_str = new Uint8Array(dkcomp.memory.buffer, dkcomp.dk_get_error(e));
+    let end = 0;
+    while (error_str[end] !== 0) end++;
+    const str = new TextDecoder().decode(error_str.subarray(0, end));
+    pmsg(`Error: ${str}`);
+    return false;
+  }
+
+  /* retrieve output */
+  const outlen = dkcomp.get_output_size();
+  const output = new Uint8Array(dkcomp.memory.buffer, dkcomp.get_output_data(), outlen);
+  if (outlen == 0) {
+    pmsg("Output data is zero bytes.");
+    return false;
+  }
+  pmsg(`Output data is ${outlen} bytes.`);
+  return output.subarray(0, outlen);
+}
+
+async function exec (form) {
+  if (!form.action)
+    return;
+
+  if (form.file.files.length != 1) {
+    pmsg("No file selected.");
+    form.file.style.animation = "none";
+    form.file.offsetHeight;
+    form.file.style.animation = "notify 1s";
+    return;
+  }
+
+  if (await load_file(form.file.files[0])) return;
+
+  let func;
+  const mode = form.comp_mode.value;
+  switch (mode) {
+      case "0": { pmsg("Checking size..."); func = dkcomp.check_size; break; }
+      case "1": { pmsg("Decompressing..."); func = dkcomp.decompress; break; }
+      case "2": { pmsg("Compressing...");   func = dkcomp.  compress; break; }
+  }
+  const addr = (mode == 2) ? 0 : Number(form.offset_dec.value);
+  const format = form.comp_format.selectedIndex;
+  const e = await dkcomp_exec(format, func, addr);
+  if (!e) { pmsg(decode_cstring(e)); dkcomp.free_input_data(); return; }
+  if (mode == "0") return;
+
+  const fn = generate_filename(form);
+  download(fn, e);
+  pmsg(`Saved as "${fn}". (${dkcomp.get_output_size()}  bytes)`);
+
+  dkcomp.free_input_data();
+  dkcomp.free_output_data();
+}
+
+async function setup () {
+  await init_dkcomp();
+
+  /* disable the offset if compress is selected */
+  if (document.getElementById("compress").checked)
+      enable_offsets(0);
+
+  /* ensure hex element matches the dec element*/
+  update_hex(document.getElementById("offset_dec").value);
+}
+
+window.addEventListener('load', setup);
+
+-->
+</script>
+</head>
+<body>
+
+<form onsubmit="exec(this); return false;" >
+<fieldset id="formfs">
+
+<select accesskey="t" name="comp_format" id="comp_format" >
+  <optgroup label="SNES">
+    <option value="0" >DKC2/DKC3 - Big Data</option>
+    <option value="1" >DKC3 - Small Data</option>
+    <option value="2" >DKC  - Tilesets</option>
+  </optgroup>
+  <optgroup label="GB/GBC">
+  <option value="3" >DKC  - Tilemaps</option>
+  <option value="4" >DKL 1/2/3 - Tilemaps</option>
+  </optgroup>
+  <optgroup label="GBA">
+    <option value="5" >(10) - LZ77    (BIOS)</option>
+    <option value="6" >(20) - Huffman (BIOS)</option>
+    <option value="7" >(30) - RLE     (BIOS)</option>
+    <option value="8" >(50) - Huffman</option>
+    <option value="9" >(60) - Huffman</option>
+    <option value="10">Auto-Detect (GBA)</option>
+    <option value="11">GB Printer</option>
+  </optgroup>
+</select>
+<br>
+
+<input accesskey="c" type="radio" name="comp_mode" id="checksize"  value="0" onclick="enable_offsets(true);" />
+<label for="checksize">Check Size</label>
+<br>
+
+<input accesskey="c" type="radio" name="comp_mode" id="decompress" value="1" onclick="enable_offsets(true);" />
+<label for="decompress">Decompress</label>
+<br>
+
+<input accesskey="c" type="radio" name="comp_mode" id="compress"   value="2" onclick="enable_offsets(false);" checked="checked" />
+<label for="compress">Compress</label>
+<br>
+
+<input accesskey="d" type="text" name="offset_dec" id="offset_dec" pattern="[0-9]+"       value="0" size="8" oninput="update_hex(this.value);" />
+<label               for="offset_dec">Offset (Decimal)</label>                             
+<br>                                                                                       
+<input accesskey="h" type="text" name="offset_hex" id="offset_hex" pattern="[0-9A-Fa-f]+" value="0" size="8" oninput="update_dec(this.value);" />
+<label for="offset_hex">Offset (Hex)</label>
+<br>
+
+<input accesskey="o" type="file" name="file" id="file" title="You can drag files here." />
+<br>
+
+<input accesskey="x" type="submit" value="Execute" /> - 
+<input accesskey="r" type="button" value="Clear"   onclick="clear_output();" /> 
+
+</fieldset>
+</form>
+
+<fieldset>
+<span id="log">
+  Message log:
+  <br>
+  <span id="output"></span>
+</span>
+</fieldset>
+
+
+
+</body>
+</html>

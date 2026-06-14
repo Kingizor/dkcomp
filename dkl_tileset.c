@@ -2,8 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - DKL Huffman Tileset Functions */
 
-#include <stdlib.h>
-#include <string.h>
 #include "dk_internal.h"
 
 /* We provide three functions for dealing with the DKL Huffman format:

@@ -5,7 +5,6 @@
 /* note: this compression scheme is imperfect in that there are some
  * combinations of data that it cannot represent. */
 
-#include <stdlib.h>
 #include "dk_internal.h"
 
 static int read_nibble_z (struct COMPRESSOR *dk) {

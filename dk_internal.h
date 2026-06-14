@@ -9,6 +9,22 @@
 #define BUILD_DKCOMP
 #include "dkcomp.h"
 
+#if defined(BUILD_WASM)
+void *memcpy  (void *restrict, const void *restrict, size_t);
+void *memmove (void*, const void*, size_t);
+void *memset  (void*, int, size_t);
+void *calloc  (size_t, size_t);
+void *malloc  (size_t);
+void  free    (void*);
+void  qsort   (void*, size_t, size_t, int (*)(const void*, const void*));
+void *bsearch (const void*, const void*, size_t, size_t, typeof(int (const void*, const void*))*);
+
+#else
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#endif
+
 enum DK_ERROR {
     DK_SUCCESS,
 

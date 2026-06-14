@@ -2,7 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - DKC GBC compressor and decompressor */
 
-#include <stdlib.h>
 #include "dk_internal.h"
 
 /* (format is similar to the DKC SNES tileset format) */

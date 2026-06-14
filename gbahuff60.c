@@ -2,8 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - GBA Huffman (60) compressor and decompressor */
 
-#include <stdlib.h>
-#include <string.h>
 #include "dk_internal.h"
 
 #define NODE_LIMIT 515

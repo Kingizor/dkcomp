@@ -2,19 +2,12 @@
  * Copyright (c) 2020-2025 Kingizor
  * dkcomp library - application programming interface */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "dkcomp.h"
 #include "dk_internal.h"
-
 
 /* verify compressed data by decompressing and comparing */
 /* some formats pad input data which can make this fail */
 #define VERIFY_DATA 0
-
-
 
 /* File/Buffer handling */
 
@@ -24,6 +17,7 @@ static int check_input_mem (unsigned char *input) {
     return 0;
 }
 
+#if !defined(BUILD_WASM)
 static int open_input_file (
     const char *fn,
     unsigned char **input,
@@ -87,6 +81,7 @@ static int write_output_file (const char *fn, unsigned char *output, size_t outp
     fclose(f);
     return 0;
 }
+#endif
 static int open_output_buffer (unsigned char **output, size_t output_size) {
     *output = calloc(output_size, 1);
     if (*output == NULL)
@@ -118,8 +113,13 @@ static int verify_data (enum DK_FORMAT comp_type, struct COMPRESSOR *cmp) {
 /* we initially allocate more than needed */
 /* here we reduce the allocate size to the output size */
 static void shrink_buffer (unsigned char **data, size_t size) {
+#if defined(BUILD_WASM)
+    (void)data;
+    (void)size;
+#else
     unsigned char *d = realloc(*data, size);
     if (d != NULL) *data = d;
+#endif
 }
 
 
@@ -221,6 +221,7 @@ error:
     return e;
 }
 
+#if !defined(BUILD_WASM)
 int dk_compress_file_to_mem (
     enum DK_FORMAT comp_type,
     unsigned char **output,
@@ -291,7 +292,7 @@ int dk_compress_file_to_file (
     free(output);
     return 0;
 }
-
+#endif
 
 
 
@@ -332,6 +333,7 @@ error:
     return e;
 }
 
+#if !defined(BUILD_WASM)
 int dk_decompress_file_to_mem (
     enum DK_FORMAT decomp_type,
     unsigned char **output,
@@ -402,7 +404,7 @@ int dk_decompress_file_to_file (
     free(output);
     return 0;
 }
-
+#endif
 
 
 
@@ -454,6 +456,7 @@ error:
 
 }
 
+#if !defined(BUILD_WASM)
 int dk_compressed_size_file (
     enum DK_FORMAT decomp_type,
     const char *file_in,
@@ -484,4 +487,4 @@ error:
     free(dc.out.data); dc.out.data = NULL;
     return e;
 }
-
+#endif

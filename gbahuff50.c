@@ -2,8 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - GBA Huffman (50) compressor and decompressor */
 
-#include <stdlib.h>
-#include <string.h>
 #include "dk_internal.h"
 
 /* another Huffman variant */
@@ -173,8 +171,6 @@ static void init_parent (struct NODE *n) {
     if (n->dir.right->type == CNODE)
         init_parent(n->dir.right);
 }
-
-#include <stdio.h>
 
 /* construct a tree from the leaf nodes */
 static int init_tree (struct BIN *bin) {

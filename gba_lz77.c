@@ -2,7 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - GBA BIOS LZ77 compressor and decompressor */
 
-#include <stdlib.h>
 #include "dk_internal.h"
 
 static int read_byte (struct COMPRESSOR *gba) {

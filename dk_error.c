@@ -61,6 +61,9 @@ static const char *dk_error_messages[] = {
     [DK_ERROR_INVALID]      = "An invalid error code was passed to this function"
 };
 
+#if defined(BUILD_WASM)
+__attribute__((export_name("dk_get_error")))
+#endif
 const char *dk_get_error (int error_code) {
     if (error_code < 0 || error_code >= DK_ERROR_LIMIT)
         error_code = DK_ERROR_INVALID;

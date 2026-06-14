@@ -4,7 +4,6 @@
 
 /* file should be split into 640 (0x280) byte chunks before compressing */
 
-#include <stdlib.h>
 #include "dk_internal.h"
 
 #define RB(X) if ((X = read_byte(gb)) == -1) return DK_ERROR_OOB_INPUT

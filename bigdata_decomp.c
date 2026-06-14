@@ -2,8 +2,6 @@
  * Copyright (c) 2020-2021 Kingizor
  * dkcomp library - SNES DKC2/DKC3 big data decompressor */ 
 
-#include <stdlib.h>
-#include <string.h>
 #include "dk_internal.h"
 
 static int write_byte (struct COMPRESSOR *dk, unsigned char val) {

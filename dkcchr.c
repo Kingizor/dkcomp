@@ -2,8 +2,6 @@
  * Copyright (c) 2020-2022 Kingizor
  * dkcomp library - DKC CHR compressor and decompressor */
 
-#include <stdlib.h>
-#include <string.h>
 #include "dk_internal.h"
 
 /* Read a byte from input */

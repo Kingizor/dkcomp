@@ -2,7 +2,6 @@
  * Copyright (c) 2020-2022 Kingizor
  * dkcomp library - SNES DKC3 small data compressor and decompressor */
 
-#include <stdlib.h>
 #include "dk_internal.h"
 
 /* decompressor */

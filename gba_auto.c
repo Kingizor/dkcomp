@@ -2,7 +2,6 @@
  * Copyright (c) 2022 Kingizor
  * dkcomp library - GBA auto-detect decompressor */
 
-#include <stdlib.h>
 #include "dk_internal.h"
 
 int gba_decompress (struct COMPRESSOR *gba) {
