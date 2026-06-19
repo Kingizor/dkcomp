@@ -8,26 +8,26 @@ WASM_CFLAGS  = --target=wasm32 -nostdlib -DBUILD_WASM -O2 -fPIC -Wall -Wextra
 WASM_LDFLAGS = --target=wasm32 -s -flto -Wl,--no-entry
 
 LIB_FILES = \
-	dk_error.o \
-	bigdata_comp.o \
-	bigdata_decomp.o \
-	smalldata.o \
-	dkcchr.o \
-	dkcgbc.o \
-	dkl_tilemap.o \
-	dkl_tileset.o \
-	gbahuff20.o \
-	gbahuff50.o \
-	gbahuff60.o \
-	gba_lz77.o \
-	gba_rle.o \
-	gba_auto.o \
-	gb_printer.o \
-	dk_comp_lib.o
-WASM_FILES   = dk_wasm_libc.o dk_wasm_api.o qsort.o
-COMP_FILES   = comp_util.o
-DECOMP_FILES = decomp_util.o
-SERVER_FILES = server.o
+	src/dk_error.o \
+	src/bigdata_comp.o \
+	src/bigdata_decomp.o \
+	src/smalldata.o \
+	src/dkcchr.o \
+	src/dkcgbc.o \
+	src/dkl_tilemap.o \
+	src/dkl_tileset.o \
+	src/gbahuff20.o \
+	src/gbahuff50.o \
+	src/gbahuff60.o \
+	src/gba_lz77.o \
+	src/gba_rle.o \
+	src/gba_auto.o \
+	src/gb_printer.o \
+	src/dk_comp_lib.o
+WASM_FILES   = src/dk_wasm_libc.o src/dk_wasm_api.o src/qsort.o
+COMP_FILES   = src/comp_util.o
+DECOMP_FILES = src/decomp_util.o
+SERVER_FILES = src/server.o
 
 ifeq ($(OS),Windows_NT)
 	LIB_EXT  = .dll
@@ -48,18 +48,24 @@ all: comp decomp
 
 dkcomp: $(LIB_FILES)
 	$(CC) -s -flto -shared -o $(LIB_OUTPUT) $(LIB_FILES)
-decomp: dkcomp decomp_util.o dkcomp
+decomp: dkcomp src/decomp_util.o dkcomp
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(DECOMP_OUTPUT) $(DECOMP_FILES)
-comp: dkcomp comp_util.o
+comp: dkcomp src/comp_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(COMP_OUTPUT) $(COMP_FILES)
 server: dkcomp $(SERVER_FILES)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(SERVER_OUTPUT) $(SERVER_FILES) -lmicrohttpd
+	cp src/server.html server.html
 
 wasm: CC 	  = clang
 wasm: CFLAGS  = $(WASM_CFLAGS)
 wasm: LDFLAGS = $(WASM_LDFLAGS)
 wasm: $(LIB_FILES) $(WASM_FILES)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(WASM_OUTPUT) $(LIB_FILES) $(WASM_FILES)
+	cp src/wasm.html wasm.html
 
 clean:
-	rm -f $(LIB_FILES) $(LIB_OUTPUT) $(COMP_FILES) $(COMP_OUTPUT) $(DECOMP_FILES) $(DECOMP_OUTPUT) $(SERVER_FILES) $(SERVER_OUTPUT) $(WASM_FILES) $(WASM_OUTPUT)
+	rm -f $(LIB_FILES) $(LIB_OUTPUT)
+	rm -f $(COMP_FILES) $(COMP_OUTPUT)
+	rm -f $(DECOMP_FILES) $(DECOMP_OUTPUT)
+	rm -f $(SERVER_FILES) $(SERVER_OUTPUT) server.html
+	rm -f $(WASM_FILES) $(WASM_OUTPUT) wasm.html

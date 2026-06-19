@@ -2,22 +2,22 @@ project('dkcomp', 'c', license: 'MIT')
 
 # library
 dkc_common = [
-  'dk_comp_lib.c',
-  'dk_error.c',
-  'bigdata_comp.c',
-  'bigdata_decomp.c',
-  'smalldata.c',
-  'dkcchr.c',
-  'dkcgbc.c',
-  'dkl_tilemap.c',
-  'dkl_tileset.c',
-  'gbahuff20.c',
-  'gbahuff50.c',
-  'gbahuff60.c',
-  'gba_lz77.c',
-  'gba_rle.c',
-  'gba_auto.c',
-  'gb_printer.c'
+  'src/dk_comp_lib.c',
+  'src/dk_error.c',
+  'src/bigdata_comp.c',
+  'src/bigdata_decomp.c',
+  'src/smalldata.c',
+  'src/dkcchr.c',
+  'src/dkcgbc.c',
+  'src/dkl_tilemap.c',
+  'src/dkl_tileset.c',
+  'src/gbahuff20.c',
+  'src/gbahuff50.c',
+  'src/gbahuff60.c',
+  'src/gba_lz77.c',
+  'src/gba_rle.c',
+  'src/gba_auto.c',
+  'src/gb_printer.c'
 ]
 
 libdkcomp = shared_library(
@@ -28,17 +28,17 @@ libdkcomp = shared_library(
 depdkcomp = declare_dependency(link_with: libdkcomp, include_directories: '.')
 
 # standalone utilities
-executable(  'comp',   'comp_util.c', link_with: libdkcomp)
-executable('decomp', 'decomp_util.c', link_with: libdkcomp)
+executable(  'comp',   'src/comp_util.c', link_with: libdkcomp)
+executable('decomp', 'src/decomp_util.c', link_with: libdkcomp)
 
 # web version
 mhttpd = dependency('libmicrohttpd', required: false)
 if mhttpd.found()
   html = configure_file(
-     input: 'server.html',
+     input: 'src/server.html',
     output: 'server.html',
       copy:  true
   )
-  executable('server', 'server.c', link_with: libdkcomp, dependencies: mhttpd)
+  executable('server', 'src/server.c', link_with: libdkcomp, dependencies: mhttpd)
 endif
 
