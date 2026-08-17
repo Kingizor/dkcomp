@@ -289,8 +289,8 @@ static void test_case_2 (struct BIN *bin, size_t i) {
     struct PATH *step = &bin->steps[i];
     struct NCASE max = { 0,0,0 };
     size_t used = step->used + 3;
-    size_t limit = (64 < dk->in.length - i)
-                 ?  64 : dk->in.length - i;
+    size_t limit = (63 < dk->in.length - i)
+                 ?  63 : dk->in.length - i;
 
     /* using a smaller window can result in a speedup */
     /*
@@ -306,7 +306,7 @@ static void test_case_2 (struct BIN *bin, size_t i) {
                 break;
         if (max.count < match) {
             max.count = match;
-            max.addr = j;
+            max.addr  = j;
         }
         if (max.count == 63)
             break;
