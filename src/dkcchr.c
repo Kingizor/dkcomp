@@ -3,6 +3,7 @@
  * dkcomp library - DKC CHR compressor and decompressor */
 
 #include "dk_internal.h"
+#define HASH_SIZE 13
 
 /* Read a byte from input */
 static int read_byte (struct COMPRESSOR *dk) {
@@ -127,6 +128,8 @@ struct BIN {
     struct COMPRESSOR *dk;
     struct PATH *steps;
     struct U16 *lutc;
+    unsigned short *root; /* hash table */
+    unsigned short *link;
     unsigned short lut[64];
 };
 
@@ -149,6 +152,35 @@ static void reverse_path (struct BIN *bin) {
         step = next;
     }
 }
+
+/* hashing functions for window testing */
+
+static unsigned short hash3 (unsigned char *data, int i) {
+    unsigned v = data[i] | (data[i+1] << 8) | (data[i+2] << 16);
+    v = ((v * 2654435761u) >> (32 - HASH_SIZE)) & 0xFFFF;
+    return (v == 0xFFFF) ? 0 : v;
+}
+static int hash_triplets (struct BIN *bin) {
+    size_t i;
+    size_t rootlen = sizeof(unsigned short) * (1 << HASH_SIZE);
+    size_t linklen = sizeof(unsigned short) * bin->dk->in.length;
+    bin->root = malloc(rootlen);
+    bin->link = malloc(linklen);
+    if (bin->root == NULL || bin->link == NULL) {
+        free(bin->root);
+        return DK_ERROR_ALLOC;
+    }
+    memset(bin->root, -1, rootlen);
+    memset(bin->link, -1, linklen);
+    for (i = 0; i < bin->dk->in.length-3; i++) {
+        unsigned short hash = hash3(bin->dk->in.data, i);
+        bin->link[i] = bin->root[hash];
+        bin->root[hash] = i;
+    }
+    return 0;
+}
+
+
 
 
 
@@ -287,28 +319,32 @@ static void test_case_2 (struct BIN *bin, size_t i) {
     struct COMPRESSOR *dk = bin->dk;
     size_t j = 0;
     struct PATH *step = &bin->steps[i];
-    struct NCASE max = { 0,0,0 };
+    struct NCASE max = { 0,2,0 };
     size_t used = step->used + 3;
     size_t limit = (63 < dk->in.length - i)
                  ?  63 : dk->in.length - i;
+    unsigned short point;
 
-    /* using a smaller window can result in a speedup */
-    /*
-    if (i > (1 << 12))
-    j = i - (1 << 12) + 1;
-    */
+    if (i < 3 || i > bin->dk->in.length-3)
+        return;
+
+    point = bin->root[hash3(bin->dk->in.data, i)];
+    while (point > i-2 && point != 0xFFFF)
+        point = bin->link[point];
+    if (point == 0xFFFF)
+        return;
 
     /* find the longest match */
-    for (; j < i; j++) {
+    for (; point != 0xFFFF; point = bin->link[point]) {
         size_t match;
         for (match = 0; match < limit; match++)
-            if (dk->in.data[i+match] != dk->in.data[j+match])
+            if (dk->in.data[i+match] != dk->in.data[point+match])
                 break;
         if (max.count < match) {
             max.count = match;
-            max.addr  = j;
+            max.addr  = point;
         }
-        if (max.count == 63)
+        if (match == 63)
             break;
     }
 
@@ -455,7 +491,7 @@ static int write_data (struct BIN *bin) {
 
 
 int dkcchr_compress (struct COMPRESSOR *dk) {
-    struct BIN bin = { dk, NULL, NULL, {0} };
+    struct BIN bin = { dk, NULL, NULL, NULL, NULL, {0} };
     size_t least_used_c = (size_t)-1;
     int    least_used_n = 0;
     int i;
@@ -465,9 +501,12 @@ int dkcchr_compress (struct COMPRESSOR *dk) {
     bin.steps = malloc(sizeof(struct PATH) * (dk->in.length+1));
     bin.lutc  = malloc(65536*sizeof(struct U16));
     if (bin.steps == NULL
-    ||  bin.lutc == NULL) {
+    ||  bin.lutc  == NULL
+    ||  (e = hash_triplets(&bin))) {
         free(bin.lutc);
         free(bin.steps);
+        free(bin.root);
+        free(bin.link);
         return DK_ERROR_ALLOC;
     }
 
@@ -496,6 +535,8 @@ int dkcchr_compress (struct COMPRESSOR *dk) {
 
     free(bin.steps);
     free(bin.lutc);
+    free(bin.root);
+    free(bin.link);
     return e;
 }
 
